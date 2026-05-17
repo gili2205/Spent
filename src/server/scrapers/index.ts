@@ -58,6 +58,17 @@ function classifyError(error: unknown): {
   }
   const msg = error.message;
 
+  // Bot-protection block from the bank. The Isracard variant returns
+  // "result: Block Automation" out of the ValidateIdData endpoint, so this
+  // must match BEFORE the ValidateIdData credential check below.
+  if (/Block Automation|Cloudflare|captcha|recaptcha/i.test(msg)) {
+    return {
+      retryable: false,
+      friendly:
+        "The bank's bot protection blocked this sync. It usually clears after a few hours (often overnight). Wait and try again. You can also enable 'Show browser during sync' in settings - headful browsers are harder to detect.",
+    };
+  }
+
   // Isracard ValidateIdData returns an empty body when the ID/card-suffix
   // combination doesn't match a real card. This is almost always a credential
   // typo (most commonly entering the full ID into the "Last 6 Digits" field).
@@ -94,14 +105,6 @@ function classifyError(error: unknown): {
       retryable: true,
       friendly:
         "The bank's site took too long to respond. Often temporary - try again in a minute.",
-    };
-  }
-
-  if (/Cloudflare|captcha|recaptcha/i.test(msg)) {
-    return {
-      retryable: false,
-      friendly:
-        "The bank's bot protection blocked the scrape. Try enabling 'Show browser during sync' so you can solve any challenges manually.",
     };
   }
 
