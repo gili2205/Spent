@@ -9,6 +9,7 @@
     "lint": "eslint",
     "security:audit": "npm audit --omit=dev",
     "security:outdated": "npm outdated",
+    "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",
     "setup": "node scripts/setup.mjs",
     "uninstall": "node scripts/uninstall.mjs",
     "service:install": "node scripts/service/install.mjs install",
