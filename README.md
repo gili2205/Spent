@@ -153,7 +153,7 @@ flowchart LR
     Scraper["Puppeteer scraper<br/>(israeli-bank-scrapers)"]
     DB[("📦 SQLite<br/>data/spent.db<br/>(WAL mode)")]
     AI{"🤖 AI provider<br/>Claude · Ollama · None"}
-    UI["🖥 Dashboard<br/>http://spent.local:41234"]
+    UI["🖥 Dashboard<br/>http://spent.localhost:41234"]
 
     Bank -->|HTTPS<br/>credentials encrypted| Scraper
     Scraper -->|new transactions| DB
@@ -215,13 +215,13 @@ npm install
 npm run setup
 ```
 
-`npm run setup` does everything: builds the Next.js app, installs the always-on service (LaunchAgent on macOS / systemd on Linux / Task Scheduler on Windows), adds `127.0.0.1 spent.local` to your hosts file, builds the platform menubar from source, installs it to the standard location, registers it to auto-start at login, and opens the dashboard. The hosts edit is the only step that asks for `sudo` / Administrator.
+`npm run setup` does everything: builds the Next.js app, installs the always-on service (LaunchAgent on macOS / systemd on Linux / Task Scheduler on Windows), builds the platform menubar from source, installs it to the standard location, registers it to auto-start at login, and opens the dashboard. On Windows it also writes a `127.0.0.1 spent.localhost` line to your hosts file (the only step that asks for Administrator). macOS and Linux resolve `*.localhost` natively, so setup runs sudo-free there.
 
 On Linux there is no native menubar. `npm run setup` installs the service and opens the browser. Control the service with `npm run service:*` (see below).
 
 First launch of the menubar on macOS/Windows shows an unsigned-binary warning (Gatekeeper / SmartScreen). That's expected: you built it locally and didn't pay for a code-signing certificate. Right-click → Open (macOS) or "More info" → "Run anyway" (Windows). One-time.
 
-Open **`http://spent.local:41234`** and bookmark it.
+Open **`http://spent.localhost:41234`** and bookmark it.
 
 ## First-time setup
 
@@ -237,7 +237,7 @@ In the browser:
 
 | What you want | Run |
 |---|---|
-| Just use the app (no coding) | Open `http://spent.local:41234` |
+| Just use the app (no coding) | Open `http://spent.localhost:41234` |
 | Code and see changes instantly | `npm run dev` → `http://127.0.0.1:3000` |
 | Update the always-on app after editing | `npm run service:reload` |
 
@@ -266,7 +266,7 @@ npm run uninstall
 Reverses everything `npm run setup` installed:
 
 - Stops the background service and removes the LaunchAgent / Task Scheduler entry / systemd unit.
-- Removes the `127.0.0.1 spent.local` line from your hosts file (asks for `sudo` / Administrator).
+- Windows: removes the `127.0.0.1 spent.localhost` line from your hosts file (asks for Administrator). macOS/Linux don't have a hosts entry to remove unless you're upgrading from an older install — in that case the legacy `spent.local` line is cleaned up automatically.
 - Quits the menubar, removes the installed app, and removes it from Login Items / Startup.
 
 **Kept on purpose:**
@@ -340,7 +340,7 @@ spent/
 - **Port 41234 in use** → `lsof -nP -iTCP:41234 -sTCP:LISTEN` (Unix) or `netstat -ano | findstr :41234` (Windows). Kill the offender and re-run install.
 - **Gatekeeper blocks `Spent.app`** → right-click → Open → Open. One-time.
 - **Linux: "systemd user instance not available"** → `loginctl enable-linger $USER`.
-- **Windows: hosts edit fails / `spent.local` doesn't resolve** → re-run install from an elevated PowerShell (Win+X → "Terminal (Admin)") so it can edit `C:\Windows\System32\drivers\etc\hosts`. After the edit, the installer flushes the DNS cache automatically; if you edited hosts manually, run `ipconfig /flushdns`. `http://127.0.0.1:41234` always works as a fallback.
+- **Windows: hosts edit fails / `spent.localhost` doesn't resolve** → re-run install from an elevated PowerShell (Win+X → "Terminal (Admin)") so it can edit `C:\Windows\System32\drivers\etc\hosts`. After the edit, the installer flushes the DNS cache automatically; if you edited hosts manually, run `ipconfig /flushdns`. `http://127.0.0.1:41234` always works as a fallback.
 - **Bank scrape fails with "Cloudflare"** → temporarily run with `SPENT_DISABLE_CHROMIUM_SANDBOX=1` to let Puppeteer use a real Chrome profile.
 
 ## Roadmap

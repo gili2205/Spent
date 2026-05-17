@@ -6,7 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const PORT = 41234;
 export const HOST = "127.0.0.1";
-export const FRIENDLY_HOST = "spent.local";
+export const FRIENDLY_HOST = "spent.localhost";
 export const URL_BASE = `http://${FRIENDLY_HOST}:${PORT}`;
 export const LOOPBACK_URL = `http://${HOST}:${PORT}`;
 

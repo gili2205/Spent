@@ -1,113 +1,191 @@
 ---
+import { Image } from 'astro:assets';
 import { BANKS } from '../data/banks.ts';
-const cards = BANKS.filter((b) => b.kind === 'card');
-const banks = BANKS.filter((b) => b.kind === 'bank');
-const other = BANKS.filter((b) => b.kind === 'other');
+
+// Eager-glob every bank logo we have. Astro picks them up at build time.
+// Banks without a matching file fall back to the colored letter-tile.
+const logoModules = import.meta.glob<{ default: ImageMetadata }>(
+	'../assets/banks/*.png',
+	{ eager: true }
+);
+
+// Build a map: bank id → ImageMetadata
+const logos: Record<string, ImageMetadata> = {};
+for (const [filepath, mod] of Object.entries(logoModules)) {
+	const fileName = filepath.split('/').pop()!;
+	const id = fileName.replace(/\.png$/, '');
+	logos[id] = mod.default;
+}
 ---
-<section class="banks">
+<section class="banks spent-fade-up">
 	<div class="spent-wrap">
-		<p class="spent-section-label">Supported banks &amp; cards</p>
-		<h2 class="spent-h-section"><u>Eighteen</u> of them, with more on the way.</h2>
-
-		<div class="group">
-			<h3>Credit cards</h3>
-			<div class="grid">
-				{cards.map((b) => (
-					<div class="bank">
-						<span class="swatch" style={`background:${b.color}`}></span>
-						<div>
-							<strong>{b.name}</strong>
-							<p>{b.blurb}</p>
-						</div>
-					</div>
-				))}
-			</div>
+		<div class="intro">
+			<div class="spent-eyebrow center">Supported institutions</div>
+			<h2 class="display">
+				<span class="spent-serif-ital">Banks Spent </span>
+				<span class="spent-sans-bold">already speaks to.</span>
+			</h2>
 		</div>
 
-		<div class="group">
-			<h3>Banks</h3>
-			<div class="grid">
-				{banks.map((b) => (
+		<div class="grid">
+			{BANKS.map((b) => {
+				const logo = logos[b.id];
+				return (
 					<div class="bank">
-						<span class="swatch" style={`background:${b.color}`}></span>
-						<div>
-							<strong>{b.name}</strong>
-							<p>{b.blurb}</p>
+						<div class="art">
+							{logo ? (
+								<Image
+									src={logo}
+									alt={`${b.name} logo`}
+									class="logo"
+									loading="lazy"
+								/>
+							) : (
+								<div class="initial" style={`background: ${b.color};`}>
+									{b.name.charAt(0)}
+								</div>
+							)}
 						</div>
+						<span class="name">{b.name}</span>
+						<span class="badge">READY</span>
 					</div>
-				))}
-			</div>
-		</div>
-
-		{other.length > 0 && (
-			<div class="group">
-				<h3>Other</h3>
-				<div class="grid">
-					{other.map((b) => (
-						<div class="bank">
-							<span class="swatch" style={`background:${b.color}`}></span>
-							<div>
-								<strong>{b.name}</strong>
-								<p>{b.blurb}</p>
-							</div>
-						</div>
-					))}
+				);
+			})}
+			<div class="bank off">
+				<div class="art">
+					<div class="initial plus">+</div>
 				</div>
+				<span class="name">Yours next?</span>
+				<a class="badge contrib" href="https://github.com/Shaya16/Spent/issues">
+					CONTRIBUTE
+				</a>
 			</div>
-		)}
+		</div>
 	</div>
 </section>
 
 <style>
-	.banks { padding: 5rem 0; background: var(--spent-bg); }
-
-	.group { margin-top: 2.5rem; }
-
-	.group h3 {
-		font-family: var(--spent-font-sans);
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: var(--spent-fg-muted);
-		margin: 0 0 1rem;
+	.banks {
+		padding: 5rem 0;
+		background: var(--spent-blue);
+		color: #fff;
+	}
+	.banks :global(.spent-eyebrow) { color: rgba(255, 255, 255, 0.75); }
+	.banks :global(.spent-eyebrow::before) { background: rgba(255, 255, 255, 0.65); }
+	.banks :global(.spent-sans-bold),
+	.banks :global(.spent-serif-ital) { color: #fff; }
+	.intro {
+		max-width: 38rem;
+		margin: 0 auto 2rem;
+		text-align: center;
+	}
+	.display {
+		font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+		line-height: 1.05;
+		margin: 0;
 	}
 
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+		grid-template-columns: repeat(2, 1fr);
 		gap: 0.75rem;
+	}
+	@media (min-width: 36rem) {
+		.grid { grid-template-columns: repeat(3, 1fr); }
+	}
+	@media (min-width: 60rem) {
+		.grid { grid-template-columns: repeat(4, 1fr); gap: 0.85rem; }
 	}
 
 	.bank {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.85rem;
 		background: var(--spent-card);
-		border: 1px solid var(--spent-border);
-		border-radius: var(--spent-radius-sm);
-		padding: 0.85rem 1rem;
+		border-radius: 14px;
+		padding: 1.1rem 0.9rem 0.85rem;
+		text-align: center;
 		font-family: var(--spent-font-sans);
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		align-items: center;
+		transition: transform 180ms ease, box-shadow 180ms ease;
+		height: 130px;
+		justify-content: center;
+	}
+	.bank:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 18px 30px -18px rgba(0, 0, 0, 0.3);
 	}
 
-	.swatch {
+	.art {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 44px;
 		flex-shrink: 0;
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		margin-top: 0.45rem;
+	}
+	.art :global(.logo) {
+		max-width: 100%;
+		max-height: 44px !important;
+		height: auto !important;
+		width: auto !important;
+		object-fit: contain;
+		display: block;
 	}
 
-	.bank strong {
-		display: block;
-		font-size: 0.95rem;
+	.initial {
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: var(--spent-font-serif);
+		font-style: italic;
+		font-size: 1.25rem;
+		font-weight: 500;
+		color: #fff;
+		flex-shrink: 0;
+	}
+	.initial.plus {
+		background: var(--spent-bg-soft);
+		color: var(--spent-fg-muted);
+		font-family: var(--spent-font-sans);
+		font-style: normal;
+		font-weight: 600;
+		font-size: 1.4rem;
+	}
+
+	.bank .name {
+		font-size: 0.78rem;
+		line-height: 1.2;
 		color: var(--spent-fg);
 		font-weight: 600;
 	}
 
-	.bank p {
-		margin: 0.1rem 0 0;
-		font-size: 0.8rem;
-		color: var(--spent-fg-muted);
+	.bank .badge {
+		font-family: var(--spent-font-mono);
+		font-size: 0.55rem;
+		color: var(--spent-primary);
+		letter-spacing: 0.12em;
+		font-weight: 600;
+		text-decoration: none;
+		background: rgba(40, 199, 91, 0.18);
+		padding: 0.18rem 0.55rem;
+		border-radius: 100px;
+	}
+
+	.bank.off {
+		background: rgba(255, 255, 255, 0.08);
+		border: 1px dashed rgba(255, 255, 255, 0.25);
+	}
+	.bank.off .name { color: rgba(255, 255, 255, 0.7); }
+	.bank.off .badge.contrib {
+		color: rgba(255, 255, 255, 0.85);
+		background: rgba(255, 255, 255, 0.12);
+	}
+	.bank.off .badge.contrib:hover {
+		color: var(--spent-vibrant);
+		background: rgba(40, 199, 91, 0.18);
 	}
 </style>

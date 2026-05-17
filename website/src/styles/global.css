@@ -4,18 +4,23 @@
 @import "@fontsource/geist-mono/400.css";
 @import "@fontsource/geist-mono/500.css";
 
-/* ===== Spent design tokens (mirror src/app/globals.css) ===== */
+/* ===== Spent design tokens (website palette) ===== */
 :root {
-	--spent-bg: #FCF7ED;
-	--spent-bg-soft: #F5EBD8;
-	--spent-fg: #2C2A27;
-	--spent-fg-muted: #6B6660;
+	--spent-bg: #FAF1DC;
+	--spent-bg-soft: #F0E5C8;
+	--spent-fg: #1F4D33;
+	--spent-fg-muted: #4A6B57;
 	--spent-card: #ffffff;
-	--spent-border: #ECE3D2;
-	--spent-primary: oklch(0.55 0.10 145);
-	--spent-primary-soft: oklch(0.72 0.10 145);
-	--spent-primary-fg: #FCF7ED;
-	--spent-accent: #E89B7C;
+	--spent-border: #E5D7B0;
+	--spent-primary: #1F4D33;
+	--spent-primary-dark: #163826;
+	--spent-primary-soft: #4A6B57;
+	--spent-primary-fg: #FAF1DC;
+	--spent-vibrant: #28C75B;
+	--spent-pink: #F4A8A6;
+	--spent-blue: #4960E5;
+	--spent-orange: #FF8B6A;
+	--spent-accent: var(--spent-orange);
 	--spent-radius: 0.875rem;
 	--spent-radius-sm: 0.5rem;
 	--spent-radius-lg: 1.5rem;
@@ -23,19 +28,21 @@
 	--spent-font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
 	--spent-font-serif: 'Fraunces Variable', Georgia, serif;
 	--spent-font-mono: 'Geist Mono', 'SF Mono', Menlo, monospace;
+
+	--spent-shadow-overlay: 0 24px 50px -20px rgba(31, 77, 51, 0.4), 0 0 0 1px rgba(31, 77, 51, 0.06);
+	--spent-shadow-card: 0 18px 40px -22px rgba(31, 77, 51, 0.3);
 }
 
 :root[data-theme='dark'] {
-	--spent-bg: oklch(0.18 0.008 60);
-	--spent-bg-soft: oklch(0.22 0.010 60);
-	--spent-fg: oklch(0.94 0.018 85);
-	--spent-fg-muted: oklch(0.68 0.022 80);
-	--spent-card: oklch(0.22 0.010 60);
-	--spent-border: oklch(1 0 0 / 12%);
-	--spent-primary: oklch(0.72 0.08 145);
-	--spent-primary-soft: oklch(0.62 0.10 145);
-	--spent-primary-fg: oklch(0.18 0.012 60);
-	--spent-accent: #E89B7C;
+	--spent-bg: #163826;
+	--spent-bg-soft: #1F4D33;
+	--spent-fg: #FAF1DC;
+	--spent-fg-muted: #B8C9BC;
+	--spent-card: #1F4D33;
+	--spent-border: rgba(255, 255, 255, 0.12);
+	--spent-primary: #28C75B;
+	--spent-primary-soft: #4A6B57;
+	--spent-primary-fg: #163826;
 }
 
 /* ===== Starlight token overrides ===== */
@@ -191,35 +198,136 @@ body {
 	font-family: var(--spent-font-sans);
 	font-size: 0.95rem;
 	font-weight: 500;
-	padding: 0.7rem 1.2rem;
-	border-radius: var(--spent-radius-sm);
+	padding: 0.75rem 1.4rem;
+	border-radius: 100px;
 	text-decoration: none;
-	transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+	transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 	border: 1px solid transparent;
 	cursor: pointer;
 }
 
-.spent-btn:hover { transform: translateY(-1px); }
+.spent-btn:hover { transform: translateY(-2px); }
 
 .spent-btn-primary {
-	background: var(--spent-fg);
-	color: var(--spent-bg);
-}
-
-.spent-btn-primary:hover {
 	background: var(--spent-primary);
 	color: var(--spent-primary-fg);
 }
 
+.spent-btn-primary:hover {
+	background: var(--spent-primary-dark);
+}
+
 .spent-btn-ghost {
 	background: transparent;
-	color: var(--spent-fg);
-	border-color: var(--spent-fg);
+	color: var(--spent-primary);
+	border-color: var(--spent-primary);
 }
 
 .spent-btn-ghost:hover {
-	background: var(--spent-fg);
-	color: var(--spent-bg);
+	background: var(--spent-primary);
+	color: var(--spent-primary-fg);
+}
+
+/* ===== Typography helpers for editorial headings ===== */
+.spent-sans-bold {
+	font-family: var(--spent-font-sans);
+	font-weight: 700;
+	letter-spacing: -0.035em;
+	color: var(--spent-fg);
+	font-style: normal;
+}
+
+.spent-serif-ital {
+	font-family: var(--spent-font-serif);
+	font-style: italic;
+	font-weight: 400;
+	letter-spacing: -0.025em;
+	color: var(--spent-fg);
+}
+
+/* Vibrant green underline accent for emphasized words */
+.spent-accent-u,
+.spent-prose u.spent-accent {
+	text-decoration: underline;
+	text-decoration-color: var(--spent-vibrant);
+	text-decoration-thickness: 4px;
+	text-underline-offset: 6px;
+	text-decoration-skip-ink: none;
+}
+
+/* Eyebrow label with leading line */
+.spent-eyebrow {
+	font-family: var(--spent-font-sans);
+	font-size: 0.7rem;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--spent-fg-muted);
+	margin-bottom: 0.85rem;
+	font-weight: 500;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.spent-eyebrow::before {
+	content: '';
+	width: 18px;
+	height: 1px;
+	background: currentColor;
+}
+.spent-eyebrow.center { justify-content: center; }
+.spent-eyebrow.center::after {
+	content: '';
+	width: 18px;
+	height: 1px;
+	background: currentColor;
+}
+
+/* Generic section padding */
+.spent-section {
+	padding: 4.5rem 0;
+	position: relative;
+}
+@media (min-width: 60rem) {
+	.spent-section { padding: 5.5rem 0; }
+}
+
+/* ===== Motion utilities (tasteful tier) ===== */
+@keyframes spent-float {
+	0%, 100% { transform: var(--spent-rot, none) translateY(0); }
+	50% { transform: var(--spent-rot, none) translateY(-4px); }
+}
+
+@keyframes spent-pulse {
+	0% { box-shadow: 0 0 0 0 rgba(40, 199, 91, 0.7); }
+	70% { box-shadow: 0 0 0 8px rgba(40, 199, 91, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(40, 199, 91, 0); }
+}
+
+/* Scroll fade-up: section itself stays static (so colored backgrounds
+   never "lift" away from the section above). Only its direct children
+   animate. Reveal handled by JS adding `.is-visible` to the section. */
+.spent-fade-up > * {
+	opacity: 0;
+	transform: translateY(20px);
+	transition: opacity 700ms cubic-bezier(0.2, 0.7, 0.2, 1),
+				transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+	will-change: opacity, transform;
+}
+.spent-fade-up.is-visible > * {
+	opacity: 1;
+	transform: translateY(0);
+}
+/* Tiny stagger so content lands slightly after the decorative shapes,
+   making the section feel composed rather than dropping all at once. */
+.spent-fade-up.is-visible > *:nth-child(1) { transition-delay: 0ms; }
+.spent-fade-up.is-visible > *:nth-child(2) { transition-delay: 60ms; }
+.spent-fade-up.is-visible > *:nth-child(3) { transition-delay: 120ms; }
+.spent-fade-up.is-visible > *:nth-child(4) { transition-delay: 180ms; }
+.spent-fade-up.is-visible > *:nth-child(n+5) { transition-delay: 240ms; }
+
+@media (prefers-reduced-motion: reduce) {
+	.spent-fade-up > * { opacity: 1; transform: none; transition: none; }
+	[class*="spent-float"], .spent-overlay-card { animation: none !important; }
 }
 
 .spent-card {
@@ -259,6 +367,7 @@ html { scroll-behavior: smooth; }
 	margin-top: 0.6rem;
 	text-align: center;
 }
+
 /* ===== Docs page primitives ===== */
 .docs-hero {
 	padding: 1.5rem 0 2.5rem;

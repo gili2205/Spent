@@ -134,6 +134,14 @@
   --sidebar-ring: oklch(0.72 0.08 145);
 }
 
+/* Hebrew: use San Francisco everywhere (sans, serif headings, and mono).
+   Higher specificity than next/font's class-based variable definitions. */
+html[lang="he"] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Hebrew", "Helvetica Neue", "Arial Hebrew", Arial, sans-serif;
+  --font-serif: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Hebrew", "Helvetica Neue", "Arial Hebrew", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SF Hebrew", Menlo, monospace;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -145,10 +153,18 @@
   html {
     @apply font-sans;
   }
+  /* Disable Inter's stylistic sets for Hebrew - they don't apply and can confuse fallback rendering */
+  html[lang="he"] body {
+    font-feature-settings: normal;
+  }
   /* Make sure all utility classes still resolve sensibly */
   .font-serif {
     font-family: var(--font-serif), Georgia, serif;
     font-feature-settings: "ss01", "ss03";
+  }
+  html[lang="he"] .font-serif {
+    font-family: var(--font-serif);
+    font-feature-settings: normal;
   }
 }
 

@@ -2,7 +2,7 @@
 
 Tiny native controller for the always-on Spent server. Shows status in the menu bar (macOS) or notification area (Windows), with one-click Open dashboard / Sync now / Start–Stop service / Quit.
 
-Both apps poll `http://127.0.0.1:41234/api/health` every 5 seconds and dim the icon when the server is unreachable. The browser action opens `http://spent.local:41234`.
+Both apps poll `http://127.0.0.1:41234/api/health` every 5 seconds and dim the icon when the server is unreachable. The browser action opens `http://spent.localhost:41234`.
 
 ## macOS
 

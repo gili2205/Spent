@@ -1,14 +1,21 @@
 ---
 import '../styles/global.css';
 import Hero from '../components/Hero.astro';
-import WhyLocalFirst from '../components/WhyLocalFirst.astro';
+import HeroDisclaimer from '../components/HeroDisclaimer.astro';
+import OpenSourceSection from '../components/OpenSourceSection.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Promises from '../components/Promises.astro';
 import PeekInside from '../components/PeekInside.astro';
+import SetupSection from '../components/SetupSection.astro';
+import DarkModeStrip from '../components/DarkModeStrip.astro';
+import Bilingual from '../components/Bilingual.astro';
 import FeatureGrid from '../components/FeatureGrid.astro';
 import BankList from '../components/BankList.astro';
 import InstallCTA from '../components/InstallCTA.astro';
 import Footer from '../components/Footer.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const REPO_URL = 'https://github.com/Shaya16/Spent';
 ---
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -21,7 +28,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 		<meta property="og:title" content="Spent" />
 		<meta property="og:description" content="A finance tracker for Israel that lives on your computer. No cloud, no accounts, no tracking." />
 		<meta property="og:type" content="website" />
-		<meta name="theme-color" content="#FCF7ED" />
+		<meta name="theme-color" content="#FAF1DC" />
 	</head>
 	<body class="landing-shell">
 		<header class="topbar">
@@ -29,24 +36,39 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 				<a class="brand" href={base || '/'}>
 					<span>Spent</span>
 				</a>
-				<nav class="nav">
+				<nav class="nav" aria-label="Primary">
 					<a href={`${base}/getting-started`}>Docs</a>
 					<a href={`${base}/install/mac`}>Install</a>
-					<a href="https://github.com/Shaya16/Spent">GitHub</a>
+					<a class="star-chip" href={REPO_URL}>
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+							<path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+						</svg>
+						GitHub
+					</a>
 				</nav>
 			</div>
 		</header>
 
 		<main>
 			<Hero />
-			<WhyLocalFirst />
+			<HeroDisclaimer />
+			<OpenSourceSection />
+			<HowItWorks />
+			<Promises />
 			<PeekInside />
+			<SetupSection />
+			<DarkModeStrip />
+			<Bilingual />
 			<FeatureGrid />
 			<BankList />
 			<InstallCTA />
 		</main>
 
 		<Footer />
+
+		<script>
+			import '../scripts/motion.ts';
+		</script>
 	</body>
 </html>
 
@@ -55,14 +77,14 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 		position: sticky;
 		top: 0;
 		z-index: 10;
-		background: rgba(252, 247, 237, 0.85);
+		background: rgba(250, 241, 220, 0.85);
 		backdrop-filter: saturate(150%) blur(8px);
 		-webkit-backdrop-filter: saturate(150%) blur(8px);
 		border-bottom: 1px solid var(--spent-border);
 	}
 
 	:global(:root[data-theme='dark']) .topbar {
-		background: oklch(0.18 0.008 60 / 0.85);
+		background: rgba(22, 56, 38, 0.85);
 	}
 
 	.row {
@@ -85,6 +107,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 	.nav {
 		display: flex;
 		gap: 1.25rem;
+		align-items: center;
 		font-family: var(--spent-font-sans);
 		font-size: 0.9rem;
 	}
@@ -94,6 +117,24 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 		opacity: 0.75;
 	}
 	.nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
+
+	.nav .star-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.8rem;
+		border: 1px solid var(--spent-border);
+		background: var(--spent-card);
+		border-radius: 100px;
+		font-family: var(--spent-font-mono);
+		font-size: 0.75rem;
+		opacity: 1;
+	}
+	.nav .star-chip svg { color: var(--spent-orange); }
+	.nav .star-chip:hover {
+		border-color: var(--spent-primary);
+		text-decoration: none;
+	}
 
 	main { display: block; }
 </style>

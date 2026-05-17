@@ -157,12 +157,16 @@ as root. The LaunchAgent and systemd user unit run under your user.
 The Windows scheduled task uses `LeastPrivilege` and runs as the
 installing user, not as `SYSTEM`.
 
-**The hostname is loopback-only.** `npm run service:install` appends
-`127.0.0.1 spent.local` to your OS hosts file (the only step that
-requires elevation, and it prompts interactively). The block is
-bracketed with markers and removed cleanly by `npm run service:uninstall`.
-No mDNS / Bonjour service is ever registered, so `spent.local` does
-not resolve from any other device on your network.
+**The hostname is loopback-only.** Spent uses `spent.localhost`, which
+RFC 6761 reserves as loopback. macOS and Linux resolve `*.localhost`
+to `127.0.0.1` natively through the system resolver, so no hosts file
+edit is needed there. On Windows, `npm run service:install` appends
+`127.0.0.1 spent.localhost` to the hosts file as a compatibility
+fallback (the only step that requires elevation, and it prompts
+interactively). The block is bracketed with markers and removed
+cleanly by `npm run service:uninstall`. No mDNS / Bonjour service is
+ever registered, and the loopback address never resolves from another
+device on your network.
 
 **The health endpoint discloses minimum information.** `GET /api/health`
 returns `{ok, version, hasDb}` and nothing else. No transaction counts,

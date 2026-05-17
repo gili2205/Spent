@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..");
 const SERVICE_INSTALL = path.join(HERE, "service", "install.mjs");
-const FRIENDLY_URL = "http://spent.local:41234";
+const FRIENDLY_URL = "http://spent.localhost:41234";
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function step(msg) {
@@ -193,36 +193,38 @@ function preflight() {
   if (process.platform === "win32") {
     // Hosts file edit needs Administrator on Windows, but setup itself does
     // not. If the shell is not elevated, warn (so the user knows why
-    // spent.local won't resolve later) and keep going. The web app at
-    // 127.0.0.1 works regardless.
+    // spent.localhost may not resolve on older Windows) and keep going. The
+    // web app at 127.0.0.1 works regardless.
     const r = spawnSync("net", ["session"], { encoding: "utf-8" });
     if (r.status !== 0) {
       console.log("");
       console.log("Note: this shell is not Administrator.");
-      console.log("Setup will continue, but the hosts entry for spent.local cannot be added.");
+      console.log("Setup will continue, but the hosts entry for spent.localhost cannot be added.");
       console.log("  - http://127.0.0.1:41234 will work normally.");
-      console.log("  - http://spent.local:41234 will not resolve.");
-      console.log("To enable the friendly hostname later, relaunch from an elevated");
+      console.log("  - http://spent.localhost:41234 may not resolve on older Windows builds.");
+      console.log("To guarantee the friendly hostname, relaunch from an elevated");
       console.log("PowerShell (Win+X -> 'Terminal (Admin)') and run `npm run service:install`.");
       console.log("");
     }
   }
 }
 
-function hostsHasSpentLocal() {
-  const hostsPath = process.platform === "win32"
-    ? `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\drivers\\etc\\hosts`
-    : "/etc/hosts";
+function windowsHostsHasSpentLocalhost() {
+  const hostsPath = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\drivers\\etc\\hosts`;
   try {
     const content = fs.readFileSync(hostsPath, "utf-8");
-    return /^[^#\n]*\b127\.0\.0\.1\b[^\n]*\bspent\.local\b/m.test(content);
+    return /^[^#\n]*\b127\.0\.0\.1\b[^\n]*\bspent\.localhost\b/m.test(content);
   } catch {
     return false;
   }
 }
 
 function dashboardUrl() {
-  return hostsHasSpentLocal() ? FRIENDLY_URL : "http://127.0.0.1:41234";
+  // macOS and Linux resolve *.localhost natively (no hosts file needed).
+  // On Windows, fall back to loopback if the hosts entry wasn't written
+  // (e.g. user didn't run setup from an elevated shell).
+  if (process.platform !== "win32") return FRIENDLY_URL;
+  return windowsHostsHasSpentLocalhost() ? FRIENDLY_URL : "http://127.0.0.1:41234";
 }
 
 function buildNextApp() {

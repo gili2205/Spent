@@ -19,7 +19,7 @@ export function hostsFilePath() {
 function buildManagedBlock() {
   return [
     MARKER_START,
-    "# Added by Spent (scripts/service). Resolves spent.local to loopback.",
+    `# Added by Spent (scripts/service). Resolves ${FRIENDLY_HOST} to loopback.`,
     "# Do not edit between markers; `npm run service:uninstall` removes them.",
     MANAGED_LINE,
     MARKER_END,
@@ -91,24 +91,70 @@ function writeWindows(targetPath, newContent) {
   }
 }
 
+// Look for a managed block that points to the *previous* hostname
+// (spent.local), regardless of the current FRIENDLY_HOST value. Used to
+// detect legacy installs that need migration.
+function hasLegacyLocalBlock(content) {
+  if (!content.includes(MARKER_START)) return false;
+  const start = content.indexOf(MARKER_START);
+  const end = content.indexOf(MARKER_END);
+  if (end === -1) return false;
+  const block = content.slice(start, end + MARKER_END.length);
+  return /\bspent\.local\b/.test(block) && !/\bspent\.localhost\b/.test(block);
+}
+
+function hasCurrentBlock(content) {
+  if (!content.includes(MARKER_START)) return false;
+  const start = content.indexOf(MARKER_START);
+  const end = content.indexOf(MARKER_END);
+  if (end === -1) return false;
+  const block = content.slice(start, end + MARKER_END.length);
+  return block.includes(MANAGED_LINE);
+}
+
 export function addManagedBlock() {
   const { path: p, content } = readCurrent();
+  const isWindows = process.platform === "win32";
+  const legacy = hasLegacyLocalBlock(content);
 
-  if (content.includes(MARKER_START)) {
+  if (!isWindows) {
+    // macOS and Linux resolve *.localhost natively (macOS via the system
+    // resolver, Linux via nsswitch `myhostname`). No hosts entry needed.
+    // If a legacy `spent.local` block is still present, strip it so the old
+    // hostname stops resolving (avoids stale bookmarks hitting a slow mDNS
+    // detour or the now-wrong loopback line).
+    if (!legacy && !content.includes(MARKER_START)) {
+      return false;
+    }
+    if (legacy) {
+      console.log(
+        "Removing legacy spent.local hosts entry (no longer needed on this OS; *.localhost resolves natively).",
+      );
+    }
+    const newContent = stripManagedBlock(content);
+    writeWithPrivilege(p, newContent);
+    return true;
+  }
+
+  // Windows: write/refresh the managed block.
+  if (hasCurrentBlock(content)) {
     console.log(`Hosts file already has the spent block. No changes.`);
     return false;
   }
 
+  const stripped = stripManagedBlock(content);
   const block = buildManagedBlock();
-  const newContent =
-    content.endsWith("\n") || content === ""
-      ? content + block + os.EOL
-      : content + os.EOL + block + os.EOL;
+  const base = stripped.endsWith("\n") || stripped === "" ? stripped : stripped + os.EOL;
+  const newContent = base + block + os.EOL;
 
-  console.log(`Will append these lines to ${p}:`);
-  console.log("---");
-  console.log(block);
-  console.log("---");
+  if (legacy) {
+    console.log(`Migrating hosts entry from spent.local to ${FRIENDLY_HOST}.`);
+  } else {
+    console.log(`Will append these lines to ${p}:`);
+    console.log("---");
+    console.log(block);
+    console.log("---");
+  }
 
   writeWithPrivilege(p, newContent);
   return true;
