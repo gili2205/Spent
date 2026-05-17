@@ -10,6 +10,7 @@ import type {
   Integration,
   Workspace,
   HomePayload,
+  ActivitySnapshot,
 } from "./types";
 import { getActiveWorkspaceIdSync } from "./workspace-store";
 
@@ -220,6 +221,10 @@ export function getSummary(params: {
 
 export function getHome() {
   return fetchJSON<HomePayload>(`/api/home`);
+}
+
+export function getActivity() {
+  return fetchJSON<ActivitySnapshot>(`/api/activity`);
 }
 
 export function getCategories(kind?: CategoryKindFilter) {

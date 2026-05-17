@@ -129,7 +129,7 @@ async function fire(): Promise<void> {
   state.running = true;
   console.log("[scheduler] running");
   try {
-    await runAllWorkspaces();
+    await runAllWorkspaces(undefined, undefined, "scheduled");
     console.log("[scheduler] done");
   } catch (err) {
     console.error("[scheduler] run failed:", err);

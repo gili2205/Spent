@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getHome } from "@/lib/api";
+import { getActivity, getHome } from "@/lib/api";
 import { PageHeader } from "@/components/layout/app-shell";
 import { SyncButton } from "@/components/dashboard/sync-button";
 import { CategorizeButton } from "@/components/dashboard/categorize-button";
@@ -43,11 +43,33 @@ export function HomePage() {
     queryFn: getHome,
   });
 
+  const [activityPopoverOpen, setActivityPopoverOpen] = useState(false);
+  const { data: activity } = useQuery({
+    queryKey: ["activity"],
+    queryFn: getActivity,
+    refetchInterval: (q) => {
+      const a = q.state.data;
+      if (activityPopoverOpen) return 3000;
+      if (a?.sync.active) return 3000;
+      return 15000;
+    },
+    refetchIntervalInBackground: false,
+  });
+
+  const handleActivityOpenChange = useCallback(
+    (open: boolean) => {
+      setActivityPopoverOpen(open);
+      if (open) queryClient.invalidateQueries({ queryKey: ["activity"] });
+    },
+    [queryClient]
+  );
+
   const handleSyncOrCategorizeComplete = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["home"] });
     queryClient.invalidateQueries({ queryKey: ["summary"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
     queryClient.invalidateQueries({ queryKey: ["settings"] });
+    queryClient.invalidateQueries({ queryKey: ["activity"] });
   }, [queryClient]);
 
   return (
@@ -59,6 +81,8 @@ export function HomePage() {
             <SyncStatusPill
               items={data?.bankHealth ?? null}
               nextScheduledSync={data?.nextScheduledSync ?? null}
+              activity={activity ?? null}
+              onOpenChange={handleActivityOpenChange}
             />
             <CategorizeButton onApplied={handleSyncOrCategorizeComplete} />
             <SyncButton

@@ -236,6 +236,25 @@ export interface HomePayload {
   errors: HomeSectionError[];
 }
 
+export type SyncKind = "manual" | "scheduled";
+
+export interface ActivitySnapshot {
+  sync: {
+    active: boolean;
+    since: string | null;
+    kind: SyncKind | null;
+    stale: boolean;
+  };
+  scheduler: {
+    armed: boolean;
+    nextRunAt: string | null;
+  };
+  ollama: {
+    running: boolean;
+    spawnedBySpent: boolean;
+  };
+}
+
 export interface Integration {
   provider: string;
   createdAt: string;

@@ -36,11 +36,16 @@ import { ensureOllamaRunning } from "@/server/ai/ollama-manager";
 import { toLocalISODate } from "@/server/lib/date-utils";
 import { listAllWorkspaceIds } from "@/server/lib/workspace-context";
 import { getWorkspace } from "@/server/db/queries/workspaces";
-import { BANK_PROVIDERS, type BankProvider } from "@/lib/types";
+import { BANK_PROVIDERS, type BankProvider, type SyncKind } from "@/lib/types";
 import {
   cancelOtpRequest,
   registerOtpRequest,
 } from "@/server/sync/otp-bridge";
+import {
+  markSyncEnd,
+  markSyncHeartbeat,
+  markSyncStart,
+} from "@/server/sync/activity";
 import type { ScrapeResult } from "@/server/scrapers/types";
 
 export type SyncEventSender = (
@@ -307,6 +312,7 @@ export async function syncWorkspace(
       index: i,
       total: providersToSync.length,
     });
+    markSyncHeartbeat();
 
     const credentials = getBankCredentials(workspaceId, provider);
     if (!credentials) {
@@ -526,14 +532,20 @@ const NOOP_SEND: SyncEventSender = () => {};
 
 export async function runAllWorkspaces(
   filterProvider?: string,
-  onEvent?: SyncEventSender
+  onEvent?: SyncEventSender,
+  kind: SyncKind = "manual"
 ): Promise<WorkspaceSummary[]> {
   const send = onEvent ?? NOOP_SEND;
-  const workspaceIds = listAllWorkspaceIds();
-  const summaries: WorkspaceSummary[] = [];
-  for (const workspaceId of workspaceIds) {
-    const summary = await syncWorkspace(workspaceId, filterProvider, send);
-    summaries.push(summary);
+  markSyncStart(kind);
+  try {
+    const workspaceIds = listAllWorkspaceIds();
+    const summaries: WorkspaceSummary[] = [];
+    for (const workspaceId of workspaceIds) {
+      const summary = await syncWorkspace(workspaceId, filterProvider, send);
+      summaries.push(summary);
+    }
+    return summaries;
+  } finally {
+    markSyncEnd();
   }
-  return summaries;
 }

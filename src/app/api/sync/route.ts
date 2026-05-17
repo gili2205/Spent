@@ -8,6 +8,7 @@ import {
   hasWorkspaceHeader,
 } from "@/server/lib/workspace-context";
 import { cancelOtpRequest } from "@/server/sync/otp-bridge";
+import { markSyncEnd, markSyncStart } from "@/server/sync/activity";
 
 function sseEvent(
   event: string,
@@ -49,6 +50,8 @@ export async function POST(request: Request) {
         }
       });
 
+      const headerPathTracking = headerPresent;
+      if (headerPathTracking) markSyncStart("manual");
       try {
         const summaries: WorkspaceSummary[] = [];
         if (headerPresent) {
@@ -96,6 +99,8 @@ export async function POST(request: Request) {
             ? error.message.replace(/\b\d{5,}\b/g, "[REDACTED]")
             : "An unexpected error occurred";
         send("error", { message });
+      } finally {
+        if (headerPathTracking) markSyncEnd();
       }
 
       controller.close();
