@@ -1,38 +1,50 @@
 ---
 title: Getting started
-description: What Spent is, what you'll need, and what to expect during install.
+description: A local-only personal finance tracker for Israeli banks. Beautiful, private, open source.
 ---
 
 import { Image } from 'astro:assets';
 import dashboardShot from '../../assets/screenshots/dashboard-light.png';
+import DocsHero from '../../components/docs/DocsHero.astro';
+import DocsCardGrid from '../../components/docs/DocsCardGrid.astro';
+import DocsCard from '../../components/docs/DocsCard.astro';
+import Callout from '../../components/docs/Callout.astro';
 
-Spent is a personal finance tracker that runs entirely on your own computer. It signs into your Israeli banks for you, pulls down the last few months of transactions, sorts them into spending categories, and shows you a calm dashboard at <code>localhost</code>.
+<DocsHero
+  eyebrow="WELCOME"
+  titleBold="Spent"
+  titleItalic="in five minutes."
+  lede="A local-only personal finance tracker for Israeli banks. Beautiful, private, open source."
+/>
+
+Spent runs entirely on your own computer. It signs into your Israeli banks for you, pulls down the last few months of transactions, sorts them into categories, and shows you a calm dashboard at `localhost`. No cloud, no accounts, no telemetry.
 
 <figure class="doc-figure">
   <Image src={dashboardShot} alt="The Spent dashboard, showing monthly spending, category totals, and recent transactions" class="doc-shot" />
   <figcaption>The dashboard you'll wake up to every morning.</figcaption>
 </figure>
 
-It is not a SaaS. There is no account. Your data never leaves your machine.
-
 ## What you'll need
 
-- A Mac or Windows PC you don't mind installing a small background service on.
-- About **15 minutes**: 5 to install, 5 to connect a bank, a few more to get used to it.
-- Your **bank login credentials** (the same ones you use on the bank's website or app).
-- Either an **Anthropic API key** (Claude, paid) or **Ollama installed locally** (free). You can also skip AI entirely.
+- A Mac, Windows PC, or Linux machine.
+- About **10 minutes** to install and 5 to connect a bank.
+- Your **bank login credentials** (same ones you use on the bank's website).
+- *Optional*: an **Anthropic API key** for Claude, or **Ollama installed locally**. You can also skip AI entirely.
 
-## How install works
+<Callout variant="gotcha">
+Spent automates your bank's website on your behalf. Some banks restrict this in their terms. You're responsible for using Spent within them. Read the full [Disclaimer](/Spent/disclaimer) before installing.
+</Callout>
 
-Spent runs as a small background process. The browser-facing dashboard is opened in your normal web browser at `http://localhost:41234`. A tiny menubar / system-tray app gives you one-click access to *Open*, *Sync*, and *Start / Stop*.
+## Pick your path
 
-You don't need to keep a terminal window open after install. The background service starts on login.
-
-## Pick your operating system
-
-- [Install on macOS →](/Spent/install/mac)
-- [Install on Windows →](/Spent/install/windows)
-
-## A note on banks
-
-Spent automates your bank's website on your behalf. **Some banks restrict this kind of automation in their terms of service**, and you're responsible for using Spent within them. The app is read-only and never moves money. Read the full [Disclaimer](/Spent/disclaimer) before installing.
+<DocsCardGrid>
+  <DocsCard eyebrow="START HERE" title="What is Spent?" desc="One-pager about the project, philosophy, and trade-offs." href="/Spent/what-is-spent" accent="sage" arrow="Read the intro →" />
+  <DocsCard eyebrow="INSTALL · MACOS" title="On macOS" desc="Three commands, about ten minutes." href="/Spent/install/mac" accent="vibrant" arrow="Install →" />
+  <DocsCard eyebrow="INSTALL · WINDOWS" title="On Windows" desc="Three commands, plus a .NET 8 SDK prompt." href="/Spent/install/windows" accent="blue" arrow="Install →" />
+  <DocsCard eyebrow="INSTALL · LINUX" title="On Linux" desc="Service-only, no menubar." href="/Spent/install/linux" accent="orange" arrow="Install →" />
+  <DocsCard eyebrow="USING SPENT" title="Connect your bank" desc="What credentials each Israeli bank needs." href="/Spent/connect-bank" accent="pink" arrow="Connect →" />
+  <DocsCard eyebrow="USING SPENT" title="Categorize with AI" desc="Claude, Ollama, or manual — pick one." href="/Spent/ai-categorization" accent="blue" arrow="Choose a provider →" />
+  <DocsCard eyebrow="USING SPENT" title="Sync & dashboard" desc="Day-to-day use, menubar, dark mode." href="/Spent/sync-and-dashboard" accent="orange" arrow="Tour the dashboard →" />
+  <DocsCard eyebrow="REFERENCE" title="Security & privacy" desc="How encryption works, what travels the network." href="/Spent/security-and-privacy" accent="sage" arrow="Read the details →" />
+  <DocsCard eyebrow="REFERENCE" title="Troubleshooting" desc="Common gotchas, grouped by OS." href="/Spent/troubleshooting" accent="pink" arrow="Find your problem →" />
+</DocsCardGrid>
