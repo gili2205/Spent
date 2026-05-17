@@ -53,6 +53,7 @@ export default defineConfig({
 					label: 'Welcome',
 					items: [
 						{ label: 'Getting started', slug: 'getting-started' },
+						{ label: 'What is Spent?', slug: 'what-is-spent' },
 					],
 				},
 				{
@@ -60,6 +61,7 @@ export default defineConfig({
 					items: [
 						{ label: 'On macOS', slug: 'install/mac' },
 						{ label: 'On Windows', slug: 'install/windows' },
+						{ label: 'On Linux', slug: 'install/linux' },
 					],
 				},
 				{
@@ -68,6 +70,8 @@ export default defineConfig({
 						{ label: 'Connect your bank', slug: 'connect-bank' },
 						{ label: 'Categorize with AI', slug: 'ai-categorization' },
 						{ label: 'Sync & dashboard', slug: 'sync-and-dashboard' },
+						{ label: 'Categories & budgets', slug: 'categories-and-budgets' },
+						{ label: 'Hebrew & RTL', slug: 'hebrew-and-rtl' },
 					],
 				},
 				{
