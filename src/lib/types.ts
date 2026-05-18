@@ -36,6 +36,7 @@ export interface Transaction {
 export interface TransactionWithCategory extends Transaction {
   categoryName: string | null;
   categoryColor: string | null;
+  isExcluded: boolean;
 }
 
 export type CategoryKind = "expense" | "income";
@@ -712,3 +713,10 @@ export const BANK_PROVIDERS: BankProviderInfo[] = [
     supportsProgrammaticTwoFactor: true,
   },
 ];
+
+export interface ExcludedMerchant {
+  id: number;
+  provider: string;
+  merchantKey: string;
+  createdAt: string;
+}
