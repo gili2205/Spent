@@ -30,7 +30,9 @@ export function ProviderBadge({
     ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
     : null;
 
-  const showImage = imageOk !== false && logoUrl;
+  const showImage = imageOk === true && logoUrl != null;
+  const imageInset = Math.max(2, Math.round(size * 0.12));
+  const imageSize = size - imageInset * 2;
 
   return (
     <div
@@ -39,17 +41,17 @@ export function ProviderBadge({
         width: size,
         height: size,
         borderRadius: radius,
-        background: showImage ? "var(--card)" : color,
+        background: showImage ? "#ffffff" : color,
         border: showImage ? "1px solid var(--border)" : "none",
       }}
     >
-      {showImage && (
+      {logoUrl != null && imageOk !== false ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={logoUrl!}
-          alt={`${name} logo`}
-          width={size - 12}
-          height={size - 12}
+          src={logoUrl}
+          alt=""
+          width={imageSize}
+          height={imageSize}
           onLoad={(e) => {
             // Google returns a 16x16 fallback when the requested size isn't
             // available. If both width and height are 16, treat as missing.
@@ -61,9 +63,14 @@ export function ProviderBadge({
             }
           }}
           onError={() => setImageOk(false)}
-          style={{ objectFit: "contain", display: "block" }}
+          className={
+            showImage
+              ? "block object-contain"
+              : "pointer-events-none absolute opacity-0"
+          }
+          style={{ width: imageSize, height: imageSize }}
         />
-      )}
+      ) : null}
       {!showImage && (
         <>
           <div
