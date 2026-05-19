@@ -6,12 +6,21 @@ import { getWorkspaceIdFromRequest } from "@/server/lib/workspace-context";
 
 export async function POST(request: Request) {
   const workspaceId = getWorkspaceIdFromRequest(request);
-  const body = (await request.json()) as { provider: string };
+  const body = (await request.json()) as {
+    provider: string;
+    credentialId?: number;
+    credentials?: Record<string, string>;
+  };
 
-  const credentials = getBankCredentials(workspaceId, body.provider);
+  const credentials =
+    body.credentials ??
+    (body.credentialId != null
+      ? getBankCredentials(workspaceId, body.credentialId)
+      : null);
+
   if (!credentials) {
     return NextResponse.json(
-      { success: false, message: "No credentials found for this provider" },
+      { success: false, message: "No credentials found for this account" },
       { status: 400 }
     );
   }

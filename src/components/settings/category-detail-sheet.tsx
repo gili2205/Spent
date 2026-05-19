@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,6 +12,15 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input, InputGroup } from "@/components/ui/input";
@@ -21,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  deleteCategory,
   getCategories,
   setCategoryParent,
   updateBudget,
@@ -70,6 +82,7 @@ export function CategoryDetailSheet({
             category={category}
             data={data}
             allCategories={allCategories ?? []}
+            onClose={onClose}
           />
         ) : null}
       </SheetContent>
@@ -81,10 +94,12 @@ function Body({
   category,
   data,
   allCategories,
+  onClose,
 }: {
   category: Category;
   data: CategoryWithData | null;
   allCategories: Category[];
+  onClose: () => void;
 }) {
   const sameKind = allCategories.filter(
     (c) => c.kind === category.kind && c.id !== category.id
@@ -92,6 +107,14 @@ function Body({
   const eligibleParents = sameKind
     .filter((c) => c.parentId == null)
     .sort((a, b) => a.name.localeCompare(b.name));
+  const childCategories = useMemo(
+    () =>
+      allCategories
+        .filter((c) => c.parentId === category.id)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [allCategories, category.id]
+  );
+  const isParentGroup = childCategories.length > 0 || data?.isParent === true;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -133,8 +156,139 @@ function Body({
         />
 
         <DescriptionSection category={category} />
+
+        <DeleteCategorySection
+          category={category}
+          transactionCount={data?.transactionCount ?? 0}
+          isParentGroup={isParentGroup}
+          childCategories={childCategories}
+          onDeleted={onClose}
+        />
       </div>
     </div>
+  );
+}
+
+function parseDeleteCategoryError(message: string): string[] | null {
+  try {
+    const body = JSON.parse(message) as {
+      error?: string;
+      children?: { name: string }[];
+    };
+    if (body.error === "has-children" && body.children?.length) {
+      return body.children.map((c) => c.name);
+    }
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
+
+function DeleteCategorySection({
+  category,
+  transactionCount,
+  isParentGroup,
+  childCategories,
+  onDeleted,
+}: {
+  category: Category;
+  transactionCount: number;
+  isParentGroup: boolean;
+  childCategories: Category[];
+  onDeleted: () => void;
+}) {
+  const t = useTranslations("settings.categories");
+  const tCommon = useTranslations("common");
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => deleteCategory(category.id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["summary"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast.success(
+        t("deletedToast", { count: result.unassignedTransactionCount })
+      );
+      setOpen(false);
+      onDeleted();
+    },
+    onError: (err: Error) => {
+      const names =
+        parseDeleteCategoryError(err.message) ??
+        (childCategories.length > 0
+          ? childCategories.map((c) => c.name)
+          : null);
+      if (names && names.length > 0) {
+        toast.error(t("deleteHasChildrenNamed", { names: names.join(", ") }));
+      } else if (
+        err.message.includes("has-children") ||
+        err.message.includes("409")
+      ) {
+        toast.error(t("deleteHasChildren"));
+      } else {
+        toast.error(t("deleteFailed"));
+      }
+    },
+  });
+
+  return (
+    <>
+      <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">{t("deleteTitle")}</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {isParentGroup ? t("deleteParentHint") : t("deleteHint")}
+            </p>
+            {isParentGroup && childCategories.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-0.5 ps-4 text-xs text-foreground/80">
+                {childCategories.map((child) => (
+                  <li key={child.id}>{child.name}</li>
+                ))}
+              </ul>
+            ) : null}
+            <Button
+              variant="destructive"
+              size="sm"
+              className="mt-3 gap-1.5"
+              onClick={() => setOpen(true)}
+              disabled={isParentGroup}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t("deleteButton")}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("confirmDeleteTitle", { name: category.name })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("confirmDeleteDescription", { count: transactionCount })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? tCommon("deleting") : t("deleteButton")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

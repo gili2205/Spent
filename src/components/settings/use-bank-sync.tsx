@@ -12,31 +12,31 @@ export interface SyncState {
 
 export function useBankSync() {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<Record<string, SyncState>>({});
+  const [state, setState] = useState<Record<number, SyncState>>({});
 
   const start = useCallback(
-    (provider: string) => {
+    (credentialId: number) => {
       setState((prev) => ({
         ...prev,
-        [provider]: { syncing: true, stage: "Connecting…" },
+        [credentialId]: { syncing: true, stage: "Connecting…" },
       }));
-      const { cancel } = startSync(provider, (event: SyncProgressEvent) => {
+      const { cancel } = startSync(credentialId, (event: SyncProgressEvent) => {
         if (event.type === "provider-start") {
           setState((prev) => ({
             ...prev,
-            [provider]: { syncing: true, stage: "Pulling transactions…" },
+            [credentialId]: { syncing: true, stage: "Pulling transactions…" },
           }));
         } else if (event.type === "provider-2fa-needed") {
-          // The settings page doesn't mount the SyncProgressDialog with an OTP
-          // input. Cancel this sync and direct the user to the dashboard sync
-          // where the OTP input is wired up. Once the long-term token is
-          // saved, future syncs from this page will work without 2FA.
           cancel();
           setState((prev) => ({
             ...prev,
-            [provider]: { syncing: false, stage: "" },
+            [credentialId]: { syncing: false, stage: "" },
           }));
-          toast.warning(`${provider} needs a 2FA code`, {
+          const label =
+            (event.data.label as string | undefined) ??
+            (event.data.provider as string | undefined) ??
+            "Bank";
+          toast.warning(`${label} needs a 2FA code`, {
             description:
               "Use the global Sync button on the dashboard to enter the one-time code. Spent will remember the token for future syncs.",
             duration: 12000,
@@ -45,13 +45,13 @@ export function useBankSync() {
         } else if (event.type === "provider-2fa-manual") {
           setState((prev) => ({
             ...prev,
-            [provider]: { syncing: true, stage: "Solve 2FA in popup…" },
+            [credentialId]: { syncing: true, stage: "Solve 2FA in popup…" },
           }));
         } else if (event.type === "stage") {
           const s = event.data.stage as string;
           setState((prev) => ({
             ...prev,
-            [provider]: {
+            [credentialId]: {
               syncing: true,
               stage: s === "categorizing" ? "Categorizing…" : "Working…",
             },
@@ -59,7 +59,7 @@ export function useBankSync() {
         } else if (event.type === "complete") {
           setState((prev) => ({
             ...prev,
-            [provider]: { syncing: false, stage: "" },
+            [credentialId]: { syncing: false, stage: "" },
           }));
           const data = event.data as {
             added: number;
@@ -75,7 +75,7 @@ export function useBankSync() {
         } else if (event.type === "error") {
           setState((prev) => ({
             ...prev,
-            [provider]: { syncing: false, stage: "" },
+            [credentialId]: { syncing: false, stage: "" },
           }));
           toast.error((event.data.message as string) ?? "Sync failed", {
             duration: Infinity,
@@ -87,8 +87,8 @@ export function useBankSync() {
     [queryClient]
   );
 
-  const stateFor = (provider: string): SyncState =>
-    state[provider] ?? { syncing: false, stage: "" };
+  const stateFor = (credentialId: number): SyncState =>
+    state[credentialId] ?? { syncing: false, stage: "" };
 
   const anySyncing = Object.values(state).some((s) => s.syncing);
 

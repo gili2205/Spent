@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProviderBadge } from "@/components/setup/provider-badge";
-import { BANK_PROVIDERS, type BankProviderInfo } from "@/lib/types";
+import { BANK_PROVIDERS, type BankProviderInfo, type Integration } from "@/lib/types";
 import {
   deleteIntegration,
   getIntegrationCredentials,
@@ -29,12 +29,8 @@ export interface BankDetailSheetProps {
   open: boolean;
   mode: "edit" | "add";
   providerId: string | null;
-  connected?: {
-    provider: string;
-    updatedAt: string;
-    lastSyncAt: string | null;
-    transactionCount: number;
-  } | null;
+  credentialId: number | null;
+  connected?: Integration | null;
   onClose: () => void;
 }
 
@@ -42,6 +38,7 @@ export function BankDetailSheet({
   open,
   mode,
   providerId,
+  credentialId,
   connected,
   onClose,
 }: BankDetailSheetProps) {
@@ -63,6 +60,7 @@ export function BankDetailSheet({
           <SheetBody
             info={info}
             mode={mode}
+            credentialId={credentialId}
             connected={connected ?? null}
             onClose={onClose}
           />
@@ -75,12 +73,14 @@ export function BankDetailSheet({
 function SheetBody({
   info,
   mode,
+  credentialId,
   connected,
   onClose,
 }: {
   info: BankProviderInfo;
   mode: "edit" | "add";
-  connected: BankDetailSheetProps["connected"];
+  credentialId: number | null;
+  connected: Integration | null;
   onClose: () => void;
 }) {
   return (
@@ -95,12 +95,12 @@ function SheetBody({
             radius={10}
           />
           <div className="min-w-0 flex-1">
-            <SheetTitle>{info.name}</SheetTitle>
+            <SheetTitle>{connected?.label ?? info.name}</SheetTitle>
             <SheetDescription className="mt-0.5">
               {mode === "add"
                 ? "Connect this bank to sync transactions."
                 : connected
-                  ? `Connected · ${connected.transactionCount} transactions`
+                  ? `${info.name} · ${connected.transactionCount} transactions`
                   : info.blurb}
             </SheetDescription>
           </div>
@@ -109,13 +109,15 @@ function SheetBody({
 
       <div className="flex-1 space-y-6 p-6">
         <CredentialsForm
+          key={`${info.id}-${credentialId ?? "new"}`}
           info={info}
           isEdit={mode === "edit"}
+          credentialId={credentialId}
+          initialLabel={connected?.label ?? ""}
           onSaved={onClose}
         />
         {mode === "edit" && connected ? (
           <RecentSyncCard
-            provider={connected.provider}
             lastSyncAt={connected.lastSyncAt}
             transactionCount={connected.transactionCount}
           />
@@ -124,7 +126,7 @@ function SheetBody({
 
       {mode === "edit" && connected ? (
         <div className="border-t border-border/40 p-6">
-          <DangerZone provider={connected.provider} onRemoved={onClose} />
+          <DangerZone credentialId={connected.id} onRemoved={onClose} />
         </div>
       ) : null}
     </div>
@@ -134,13 +136,21 @@ function SheetBody({
 function CredentialsForm({
   info,
   isEdit,
+  credentialId,
+  initialLabel,
   onSaved,
 }: {
   info: BankProviderInfo;
   isEdit: boolean;
+  credentialId: number | null;
+  initialLabel: string;
   onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [label, setLabel] = useState(initialLabel);
+  const [savedCredentialId, setSavedCredentialId] = useState<number | null>(
+    credentialId
+  );
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(!isEdit);
   const [testing, setTesting] = useState(false);
@@ -154,13 +164,18 @@ function CredentialsForm({
   } | null>(null);
 
   useEffect(() => {
-    if (!isEdit) return;
+    setSavedCredentialId(credentialId);
+  }, [credentialId]);
+
+  useEffect(() => {
+    if (!isEdit || credentialId == null) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await getIntegrationCredentials(info.id);
+        const res = await getIntegrationCredentials(credentialId);
         if (cancelled) return;
         if (res.credentials) setCredentials(res.credentials);
+        if (res.label) setLabel(res.label);
         setRequiresManualTwoFactor(res.requiresManualTwoFactor);
         setHasTwoFactorToken(res.hasTwoFactorToken);
       } finally {
@@ -170,26 +185,58 @@ function CredentialsForm({
     return () => {
       cancelled = true;
     };
-  }, [isEdit, info.id]);
+  }, [isEdit, credentialId]);
 
-  const allValid = info.credentialFields.every((f) => {
-    const v = credentials[f.key]?.trim() ?? "";
-    if (!v) return false;
-    if (f.exactLength != null && v.length !== f.exactLength) return false;
-    return true;
+  const allValid =
+    label.trim().length > 0 &&
+    info.credentialFields.every((f) => {
+      const v = credentials[f.key]?.trim() ?? "";
+      if (!v) return false;
+      if (f.exactLength != null && v.length !== f.exactLength) return false;
+      return true;
+    });
+
+  const saveOptions = (id: number | null) => ({
+    label: label.trim(),
+    ...(id != null ? { credentialId: id } : {}),
+    requiresManualTwoFactor,
   });
+
+  const parseApiError = (err: unknown, fallback: string): string => {
+    if (!(err instanceof Error)) return fallback;
+    try {
+      const body = JSON.parse(err.message) as { message?: string };
+      if (body.message) return body.message;
+    } catch {
+      /* plain text */
+    }
+    return err.message || fallback;
+  };
 
   const handleTest = async () => {
     setTesting(true);
     setResult(null);
     try {
-      await saveBankCredentials(info.id, credentials, {
-        requiresManualTwoFactor,
+      const existingId = savedCredentialId;
+      let testId = existingId;
+      if (existingId != null) {
+        const saved = await saveBankCredentials(
+          info.id,
+          credentials,
+          saveOptions(existingId)
+        );
+        testId = saved.credentialId;
+        setSavedCredentialId(testId);
+      }
+      const res = await testBankConnection(info.id, {
+        ...(testId != null ? { credentialId: testId } : { credentials }),
       });
-      const res = await testBankConnection(info.id);
       setResult(res);
-    } catch {
-      setResult({ success: false, message: "Connection test failed." });
+    } catch (err) {
+      setResult({
+        success: false,
+        message: parseApiError(err, "Connection test failed."),
+      });
     } finally {
       setTesting(false);
     }
@@ -198,24 +245,33 @@ function CredentialsForm({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await saveBankCredentials(info.id, credentials, {
-        requiresManualTwoFactor,
-      });
+      const saved = await saveBankCredentials(
+        info.id,
+        credentials,
+        saveOptions(savedCredentialId)
+      );
+      setSavedCredentialId(saved.credentialId);
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
       queryClient.invalidateQueries({ queryKey: ["setupStatus"] });
       toast.success(`${info.name} credentials saved`);
       onSaved();
-    } catch {
-      setResult({ success: false, message: "Failed to save credentials." });
+    } catch (err) {
+      setResult({
+        success: false,
+        message: parseApiError(err, "Failed to save credentials."),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleResetToken = async () => {
+    if (savedCredentialId == null) return;
     setResetPending(true);
     try {
-      await updateIntegrationSettings(info.id, { resetTwoFactorToken: true });
+      await updateIntegrationSettings(savedCredentialId, {
+        resetTwoFactorToken: true,
+      });
       setHasTwoFactorToken(false);
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
       toast.success(
@@ -239,6 +295,20 @@ function CredentialsForm({
 
   return (
     <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor={`${info.id}-label`}>Account label</Label>
+        <Input
+          id={`${info.id}-label`}
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder={`e.g. Personal card, ${info.name} (2)`}
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown in your bank list. Use a distinct label when you connect the same
+          bank more than once.
+        </p>
+      </div>
+
       <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         Credentials
       </div>
@@ -287,7 +357,7 @@ function CredentialsForm({
         onChangeManualFlag={setRequiresManualTwoFactor}
         onResetToken={handleResetToken}
         resetPending={resetPending}
-        showResetButton={isEdit}
+        showResetButton={savedCredentialId != null}
       />
 
       {result && (
@@ -322,7 +392,6 @@ function RecentSyncCard({
   lastSyncAt,
   transactionCount,
 }: {
-  provider: string;
   lastSyncAt: string | null;
   transactionCount: number;
 }) {
@@ -346,16 +415,16 @@ function RecentSyncCard({
 }
 
 function DangerZone({
-  provider,
+  credentialId,
   onRemoved,
 }: {
-  provider: string;
+  credentialId: number;
   onRemoved: () => void;
 }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const mutation = useMutation({
-    mutationFn: () => deleteIntegration(provider),
+    mutationFn: () => deleteIntegration(credentialId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
       queryClient.invalidateQueries({ queryKey: ["setupStatus"] });

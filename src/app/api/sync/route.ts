@@ -19,8 +19,12 @@ function sseEvent(
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    provider?: string;
+    credentialId?: number;
   };
+  const filterCredentialId =
+    body.credentialId != null && Number.isFinite(body.credentialId)
+      ? body.credentialId
+      : undefined;
 
   // When the request includes X-Workspace-ID we sync only that workspace
   // (the in-app "Sync now" button). When it's absent we treat it as a
@@ -57,10 +61,10 @@ export async function POST(request: Request) {
         if (headerPresent) {
           const workspaceId = getWorkspaceIdFromRequest(request);
           summaries.push(
-            await syncWorkspace(workspaceId, body.provider, send)
+            await syncWorkspace(workspaceId, filterCredentialId, send)
           );
         } else {
-          summaries.push(...(await runAllWorkspaces(body.provider, send)));
+          summaries.push(...(await runAllWorkspaces(filterCredentialId, send)));
         }
 
         const totalAdded = summaries.reduce((s, w) => s + w.added, 0);

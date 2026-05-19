@@ -15,5 +15,14 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json(getTransactionsSummary(workspaceId, from, to));
+  const credentialIds = searchParams
+    .getAll("credentialIds")
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  return NextResponse.json(
+    getTransactionsSummary(workspaceId, from, to, {
+      credentialIds: credentialIds.length > 0 ? credentialIds : undefined,
+    })
+  );
 }

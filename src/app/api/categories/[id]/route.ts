@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  deleteCategory,
   setCategoryParent,
   updateCategoryBudgetMode,
   updateCategoryDescription,
@@ -108,4 +109,38 @@ export async function PATCH(
   }
 
   return NextResponse.json({ success: true });
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const workspaceId = getWorkspaceIdFromRequest(request);
+  const { id } = await params;
+  const categoryId = Number(id);
+  if (!Number.isFinite(categoryId)) {
+    return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  }
+
+  const result = deleteCategory(workspaceId, categoryId);
+  if (!result.ok) {
+    if (result.reason === "not-found") {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    return NextResponse.json(
+      {
+        error: "has-children",
+        message:
+          "This category has subcategories. Delete each one before deleting this group.",
+        children: result.children ?? [],
+      },
+      { status: 409 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    deletedCategoryId: result.deletedCategoryId,
+    unassignedTransactionCount: result.unassignedTransactionCount,
+  });
 }

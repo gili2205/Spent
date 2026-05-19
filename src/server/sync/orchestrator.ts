@@ -5,6 +5,7 @@ import {
   getRequiresManualTwoFactor,
   listBankCredentials,
   updateCredentialField,
+  type BankCredentialMeta,
 } from "@/server/db/queries/bank-credentials";
 import { getAppSettings } from "@/server/db/queries/settings";
 import {
@@ -55,14 +56,12 @@ export type SyncEventSender = (
 
 export interface ProviderResult {
   provider: BankProvider;
+  credentialId: number;
+  label: string;
   ok: boolean;
   added: number;
   updated: number;
   errorMessage?: string;
-  /**
-   * Set of sync-run IDs that registered an OTP bridge during this sync.
-   * Surfaces so the SSE route can cancel any leftover bridges on stream abort.
-   */
   syncRunId?: number;
 }
 
@@ -99,6 +98,7 @@ function supportsProgrammaticTwoFactor(provider: BankProvider): boolean {
 interface RunScrapeArgs {
   workspaceId: number;
   workspaceName: string;
+  credentialId: number;
   provider: BankProvider;
   credentials: Record<string, string>;
   startDate: Date;
@@ -111,6 +111,7 @@ async function runScrapeForProvider(args: RunScrapeArgs): Promise<ScrapeResult> 
   const {
     workspaceId,
     workspaceName,
+    credentialId,
     provider,
     credentials,
     startDate,
@@ -175,7 +176,7 @@ async function runScrapeForProvider(args: RunScrapeArgs): Promise<ScrapeResult> 
     if (result.otpLongTermToken) {
       updateCredentialField(
         workspaceId,
-        provider,
+        credentialId,
         "otpLongTermToken",
         result.otpLongTermToken
       );
@@ -197,22 +198,29 @@ async function runScrapeForProvider(args: RunScrapeArgs): Promise<ScrapeResult> 
   });
 }
 
-async function syncOneProvider(
+async function syncOneCredential(
   workspaceId: number,
   workspaceName: string,
-  provider: BankProvider,
+  meta: BankCredentialMeta,
   credentials: Record<string, string>,
   startDate: Date,
   send: SyncEventSender
 ): Promise<ProviderResult> {
-  const syncRunId = createSyncRun(workspaceId, provider, toLocalISODate(startDate));
-  const manualTwoFactor = getRequiresManualTwoFactor(workspaceId, provider);
+  const provider = meta.provider as BankProvider;
+  const syncRunId = createSyncRun(
+    workspaceId,
+    provider,
+    meta.id,
+    toLocalISODate(startDate)
+  );
+  const manualTwoFactor = getRequiresManualTwoFactor(workspaceId, meta.id);
 
   let result: ScrapeResult;
   try {
     result = await runScrapeForProvider({
       workspaceId,
       workspaceName,
+      credentialId: meta.id,
       provider,
       credentials,
       startDate,
@@ -221,8 +229,6 @@ async function syncOneProvider(
       send,
     });
   } finally {
-    // Defensive: ensure no bridge entry leaks if the scraper threw before
-    // wait() was awaited or after it returned.
     cancelOtpRequest(syncRunId, "Scrape completed");
   }
 
@@ -230,6 +236,8 @@ async function syncOneProvider(
     failSyncRun(syncRunId, result.errorMessage ?? "Scraping failed");
     return {
       provider,
+      credentialId: meta.id,
+      label: meta.label,
       ok: false,
       added: 0,
       updated: 0,
@@ -251,27 +259,36 @@ async function syncOneProvider(
     workspaceId,
     allTransactions,
     provider,
+    meta.id,
     syncRunId
   );
   completeSyncRun(syncRunId, added, updated);
 
-  return { provider, ok: true, added, updated, syncRunId };
+  return {
+    provider,
+    credentialId: meta.id,
+    label: meta.label,
+    ok: true,
+    added,
+    updated,
+    syncRunId,
+  };
 }
 
 export async function syncWorkspace(
   workspaceId: number,
-  filterProvider: string | undefined,
+  filterCredentialId: number | undefined,
   send: SyncEventSender
 ): Promise<WorkspaceSummary> {
   const workspace = getWorkspace(workspaceId);
   const workspaceName = workspace?.name ?? `Workspace ${workspaceId}`;
 
-  const providersToSync: BankProvider[] =
-    filterProvider && filterProvider !== "all"
-      ? [filterProvider as BankProvider]
-      : listBankCredentials(workspaceId).map((c) => c.provider as BankProvider);
+  const allCreds = listBankCredentials(workspaceId);
+  const credsToSync: BankCredentialMeta[] = filterCredentialId
+    ? allCreds.filter((c) => c.id === filterCredentialId)
+    : allCreds;
 
-  if (providersToSync.length === 0) {
+  if (credsToSync.length === 0) {
     send("plan", {
       workspaceId,
       workspaceName,
@@ -296,37 +313,44 @@ export async function syncWorkspace(
   send("plan", {
     workspaceId,
     workspaceName,
-    providers: providersToSync,
-    total: providersToSync.length,
+    providers: credsToSync.map((c) => c.provider),
+    total: credsToSync.length,
   });
 
   const results: ProviderResult[] = [];
 
-  for (let i = 0; i < providersToSync.length; i++) {
-    const provider = providersToSync[i];
+  for (let i = 0; i < credsToSync.length; i++) {
+    const meta = credsToSync[i];
+    const provider = meta.provider as BankProvider;
 
     send("provider-start", {
       workspaceId,
       workspaceName,
       provider,
+      credentialId: meta.id,
+      label: meta.label,
       index: i,
-      total: providersToSync.length,
+      total: credsToSync.length,
     });
     markSyncHeartbeat();
 
-    const credentials = getBankCredentials(workspaceId, provider);
+    const credentials = getBankCredentials(workspaceId, meta.id);
     if (!credentials) {
       send("provider-done", {
         workspaceId,
         workspaceName,
         provider,
+        credentialId: meta.id,
+        label: meta.label,
         ok: false,
         added: 0,
         updated: 0,
-        errorMessage: `No credentials configured for ${provider}`,
+        errorMessage: `No credentials configured for ${meta.label}`,
       });
       results.push({
         provider,
+        credentialId: meta.id,
+        label: meta.label,
         ok: false,
         added: 0,
         updated: 0,
@@ -336,10 +360,10 @@ export async function syncWorkspace(
     }
 
     try {
-      const result = await syncOneProvider(
+      const result = await syncOneCredential(
         workspaceId,
         workspaceName,
-        provider,
+        meta,
         credentials,
         startDate,
         send
@@ -349,6 +373,8 @@ export async function syncWorkspace(
         workspaceId,
         workspaceName,
         provider,
+        credentialId: meta.id,
+        label: meta.label,
         ok: result.ok,
         added: result.added,
         updated: result.updated,
@@ -361,6 +387,8 @@ export async function syncWorkspace(
           : "Unknown scrape error";
       results.push({
         provider,
+        credentialId: meta.id,
+        label: meta.label,
         ok: false,
         added: 0,
         updated: 0,
@@ -370,6 +398,8 @@ export async function syncWorkspace(
         workspaceId,
         workspaceName,
         provider,
+        credentialId: meta.id,
+        label: meta.label,
         ok: false,
         added: 0,
         updated: 0,
@@ -531,7 +561,7 @@ export async function syncWorkspace(
 const NOOP_SEND: SyncEventSender = () => {};
 
 export async function runAllWorkspaces(
-  filterProvider?: string,
+  filterCredentialId?: number,
   onEvent?: SyncEventSender,
   kind: SyncKind = "manual"
 ): Promise<WorkspaceSummary[]> {
@@ -541,7 +571,7 @@ export async function runAllWorkspaces(
     const workspaceIds = listAllWorkspaceIds();
     const summaries: WorkspaceSummary[] = [];
     for (const workspaceId of workspaceIds) {
-      const summary = await syncWorkspace(workspaceId, filterProvider, send);
+      const summary = await syncWorkspace(workspaceId, filterCredentialId, send);
       summaries.push(summary);
     }
     return summaries;

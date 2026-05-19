@@ -9,6 +9,10 @@ import type {
   MerchantSummary,
   CategoryBreakdown,
 } from "@/lib/types";
+import {
+  isTransactionSortField,
+  TRANSACTION_SORT_SQL,
+} from "@/lib/transaction-sort";
 export type TransactionKindFilter = "expense" | "income" | "all";
 
 interface RawTransaction {
@@ -37,6 +41,7 @@ export function insertTransactions(
   workspaceId: number,
   transactions: RawTransaction[],
   provider: string,
+  credentialId: number,
   syncRunId: number
 ): InsertResult {
   const db = getDb();
@@ -53,12 +58,12 @@ export function insertTransactions(
     INSERT INTO transactions (
       workspace_id, account_number, date, processed_date, original_amount, original_currency,
       charged_amount, charged_currency, description, memo, type, status,
-      identifier, installment_number, installment_total, provider,
+      identifier, installment_number, installment_total, provider, credential_id,
       sync_run_id, dedup_hash, dedup_sequence, kind
     ) VALUES (
       @workspaceId, @accountNumber, @date, @processedDate, @originalAmount, @originalCurrency,
       @chargedAmount, @chargedCurrency, @description, @memo, @type, @status,
-      @identifier, @installmentNumber, @installmentTotal, @provider,
+      @identifier, @installmentNumber, @installmentTotal, @provider, @credentialId,
       @syncRunId, @dedupHash, @dedupSequence, @kind
     )
     ON CONFLICT(workspace_id, dedup_hash, dedup_sequence) DO UPDATE SET
@@ -109,6 +114,7 @@ export function insertTransactions(
         installmentNumber: txn.installmentNumber ?? null,
         installmentTotal: txn.installmentTotal ?? null,
         provider,
+        credentialId,
         syncRunId: syncRunId,
         dedupHash: hash,
         dedupSequence: sequence,
@@ -148,14 +154,40 @@ interface QueryParams {
   offset?: number;
   kind?: TransactionKindFilter;
   provider?: string;
+  /** @deprecated Use credentialIds */
+  credentialId?: number;
+  credentialIds?: number[];
 }
 
-const ALLOWED_SORT_COLUMNS = new Set([
-  "date",
-  "charged_amount",
-  "description",
-  "processed_date",
-]);
+function appendCredentialIdsFilter(
+  conditions: string[],
+  values: (string | number)[],
+  credentialIds: number[] | undefined,
+  columnPrefix = ""
+): void {
+  if (!credentialIds || credentialIds.length === 0) return;
+  const col = `${columnPrefix}credential_id`;
+  const placeholders = credentialIds.map(() => "?").join(",");
+  conditions.push(`${col} IN (${placeholders})`);
+  for (const id of credentialIds) values.push(id);
+}
+
+function resolveSortSql(sort: string | undefined): string {
+  if (isTransactionSortField(sort)) {
+    return TRANSACTION_SORT_SQL[sort];
+  }
+  return TRANSACTION_SORT_SQL.date;
+}
+
+const TRANSACTION_LIST_FROM = `
+  FROM transactions t
+  LEFT JOIN categories c ON t.category_id = c.id
+  LEFT JOIN bank_credentials bc ON t.credential_id = bc.id`;
+
+const TRANSACTION_LIST_SELECT = `
+  SELECT t.*, c.name AS category_name, c.color AS category_color,
+         bc.label AS account_label
+  ${TRANSACTION_LIST_FROM}`;
 
 export function queryTransactions(
   workspaceId: number,
@@ -196,12 +228,17 @@ export function queryTransactions(
     conditions.push("t.provider = ?");
     values.push(params.provider);
   }
+  const credentialIds =
+    params.credentialIds && params.credentialIds.length > 0
+      ? params.credentialIds
+      : params.credentialId != null
+        ? [params.credentialId]
+        : undefined;
+  appendCredentialIdsFilter(conditions, values, credentialIds, "t.");
 
   const where = `WHERE ${conditions.join(" AND ")}`;
 
-  const sortCol = ALLOWED_SORT_COLUMNS.has(params.sort ?? "")
-    ? params.sort!
-    : "date";
+  const sortSql = resolveSortSql(params.sort);
   const sortOrder = params.order === "asc" ? "ASC" : "DESC";
   const limit = Math.min(params.limit ?? 50, 200);
   const offset = params.offset ?? 0;
@@ -212,11 +249,9 @@ export function queryTransactions(
 
   const rows = db
     .prepare(
-      `SELECT t.*, c.name as category_name, c.color as category_color
-       FROM transactions t
-       LEFT JOIN categories c ON t.category_id = c.id
+      `${TRANSACTION_LIST_SELECT}
        ${where}
-       ORDER BY t.${sortCol} ${sortOrder}, t.id DESC
+       ORDER BY ${sortSql} ${sortOrder}, t.id DESC
        LIMIT ? OFFSET ?`
     )
     .all(...values, limit, offset);
@@ -520,6 +555,7 @@ interface TransactionRow {
   category_source: string | null;
   ai_confidence: number | null;
   provider: string;
+  credential_id: number | null;
   sync_run_id: number;
   kind: string;
   needs_review: number;
@@ -527,6 +563,7 @@ interface TransactionRow {
   updated_at: string;
   category_name?: string | null;
   category_color?: string | null;
+  account_label?: string | null;
 }
 
 function mapTransactionRow(row: unknown): TransactionWithCategory {
@@ -551,6 +588,8 @@ function mapTransactionRow(row: unknown): TransactionWithCategory {
     categorySource: r.category_source as "ai" | "user" | null,
     aiConfidence: r.ai_confidence,
     provider: r.provider,
+    credentialId: r.credential_id ?? null,
+    accountLabel: r.account_label ?? null,
     syncRunId: r.sync_run_id,
     kind: r.kind as "expense" | "income" | "transfer",
     needsReview: r.needs_review === 1,
@@ -650,41 +689,70 @@ export interface TransactionsSummary {
   pendingReviewCount: number;
 }
 
+export interface TransactionsSummaryParams {
+  /** @deprecated Use credentialIds */
+  credentialId?: number;
+  credentialIds?: number[];
+}
+
 export function getTransactionsSummary(
   workspaceId: number,
   from: string,
-  to: string
+  to: string,
+  params: TransactionsSummaryParams = {}
 ): TransactionsSummary {
   const db = getDb();
+  const baseConditions = [
+    "workspace_id = ?",
+    "date >= ?",
+    "date <= ?",
+    "status = 'completed'",
+  ];
+  const baseValues: (string | number)[] = [workspaceId, from, to];
+  const summaryCredentialIds =
+    params.credentialIds && params.credentialIds.length > 0
+      ? params.credentialIds
+      : params.credentialId != null
+        ? [params.credentialId]
+        : undefined;
+  appendCredentialIdsFilter(baseConditions, baseValues, summaryCredentialIds);
+  const baseWhere = baseConditions.join(" AND ");
 
   const incomeAgg = db
     .prepare(
       `SELECT COALESCE(SUM(charged_amount), 0) as total, COUNT(*) as count
        FROM transactions
-       WHERE workspace_id = ? AND date >= ? AND date <= ? AND status = 'completed' AND charged_amount > 0`
+       WHERE ${baseWhere} AND charged_amount > 0`
     )
-    .get(workspaceId, from, to) as { total: number; count: number };
+    .get(...baseValues) as { total: number; count: number };
 
   const expenseAgg = db
     .prepare(
       `SELECT COALESCE(SUM(ABS(charged_amount)), 0) as total, COUNT(*) as count
        FROM transactions
-       WHERE workspace_id = ? AND date >= ? AND date <= ? AND status = 'completed' AND charged_amount < 0`
+       WHERE ${baseWhere} AND charged_amount < 0`
     )
-    .get(workspaceId, from, to) as { total: number; count: number };
+    .get(...baseValues) as { total: number; count: number };
 
   const pickLargest = (sign: "income" | "expense"): TransactionWithCategory | null => {
     const cmp = sign === "income" ? "> 0" : "< 0";
+    const tConditions = [
+      "t.workspace_id = ?",
+      "t.date >= ?",
+      "t.date <= ?",
+      "t.status = 'completed'",
+      `t.charged_amount ${cmp}`,
+    ];
+    const tValues: (string | number)[] = [workspaceId, from, to];
+    appendCredentialIdsFilter(tConditions, tValues, summaryCredentialIds, "t.");
     const row = db
       .prepare(
-        `SELECT t.*, c.name as category_name, c.color as category_color
-         FROM transactions t
-         LEFT JOIN categories c ON t.category_id = c.id
-         WHERE t.workspace_id = ? AND t.date >= ? AND t.date <= ? AND t.status = 'completed' AND t.charged_amount ${cmp}
+        `${TRANSACTION_LIST_SELECT}
+         WHERE ${tConditions.join(" AND ")}
          ORDER BY ABS(t.charged_amount) DESC, t.id DESC
          LIMIT 1`
       )
-      .get(workspaceId, from, to);
+      .get(...tValues);
     return row ? mapTransactionRow(row) : null;
   };
 
@@ -694,20 +762,20 @@ export function getTransactionsSummary(
               SUM(ABS(charged_amount)) as total,
               COUNT(*) as count
        FROM transactions
-       WHERE workspace_id = ? AND date >= ? AND date <= ? AND status = 'completed' AND charged_amount < 0
+       WHERE ${baseWhere} AND charged_amount < 0
        GROUP BY description
        ORDER BY total DESC
        LIMIT 5`
     )
-    .all(workspaceId, from, to) as { description: string; total: number; count: number }[];
+    .all(...baseValues) as { description: string; total: number; count: number }[];
 
   const pendingReview = db
     .prepare(
       `SELECT COUNT(*) as count
        FROM transactions
-       WHERE workspace_id = ? AND date >= ? AND date <= ? AND status = 'completed' AND needs_review = 1`
+       WHERE ${baseWhere} AND needs_review = 1`
     )
-    .get(workspaceId, from, to) as { count: number };
+    .get(...baseValues) as { count: number };
 
   return {
     income: {

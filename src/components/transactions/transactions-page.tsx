@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { PageHeader } from "@/components/layout/app-shell";
 import { TransactionsTable } from "@/components/dashboard/transactions-table";
@@ -13,8 +13,15 @@ import {
   getCategories,
   getTransactions,
   getTransactionsSummary,
+  listIntegrations,
 } from "@/lib/api";
 import type { TransactionKindFilter } from "@/lib/api";
+import { expandCategoryFilterIds } from "@/lib/transaction-filters";
+import {
+  nextSortState,
+  type SortOrder,
+  type TransactionSortField,
+} from "@/lib/transaction-sort";
 import {
   addMonths,
   formatMonthLabel,
@@ -27,9 +34,12 @@ export function TransactionsPage() {
   const locale = useLocale() as Locale;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
+  const [categoryFilter, setCategoryFilter] = useState<number[]>([]);
+  const [accountFilter, setAccountFilter] = useState<number[]>([]);
   const [page, setPage] = useState(0);
   const [kind, setKind] = useState<TransactionKindFilter>("all");
+  const [sortField, setSortField] = useState<TransactionSortField>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   const filterOptions: { value: TransactionKindFilter; label: string }[] = [
     { value: "all", label: t("filterAll") },
@@ -43,38 +53,55 @@ export function TransactionsPage() {
     queryKey: ["categories"],
     queryFn: () => getCategories(),
   });
-  const expandedFilter = (() => {
-    if (categoryFilter === undefined) {
-      return { category: undefined, categoryIds: undefined };
-    }
-    const all = allCategoriesQuery.data ?? [];
-    const childIds = all
-      .filter((c) => c.parentId === categoryFilter)
-      .map((c) => c.id);
-    if (childIds.length > 0) {
-      return { category: undefined, categoryIds: childIds };
-    }
-    return { category: categoryFilter, categoryIds: undefined };
-  })();
+  const integrationsQuery = useQuery({
+    queryKey: ["integrations"],
+    queryFn: () => listIntegrations(),
+  });
+
+  const expandedCategoryIds = expandCategoryFilterIds(
+    categoryFilter,
+    allCategoriesQuery.data ?? []
+  );
 
   const transactionsQuery = useQuery({
-    queryKey: ["transactions", from, to, search, categoryFilter, page, kind],
+    queryKey: [
+      "transactions",
+      from,
+      to,
+      search,
+      categoryFilter,
+      accountFilter,
+      page,
+      kind,
+      sortField,
+      sortOrder,
+    ],
     queryFn: () =>
       getTransactions({
         from,
         to,
         search: search || undefined,
-        category: expandedFilter.category,
-        categoryIds: expandedFilter.categoryIds,
+        categoryIds: expandedCategoryIds,
+        credentialIds:
+          accountFilter.length > 0 ? accountFilter : undefined,
         limit: 50,
         offset: page * 50,
         kind,
+        sort: sortField,
+        order: sortOrder,
       }),
+    placeholderData: keepPreviousData,
   });
 
   const summaryQuery = useQuery({
-    queryKey: ["transactions-summary", from, to],
-    queryFn: () => getTransactionsSummary({ from, to }),
+    queryKey: ["transactions-summary", from, to, accountFilter],
+    queryFn: () =>
+      getTransactionsSummary({
+        from,
+        to,
+        credentialIds:
+          accountFilter.length > 0 ? accountFilter : undefined,
+      }),
   });
 
   const categoriesQuery = useQuery({
@@ -118,7 +145,7 @@ export function TransactionsPage() {
                 onClick={() => {
                   setKind(opt.value);
                   setPage(0);
-                  setCategoryFilter(undefined);
+                  setCategoryFilter([]);
                 }}
                 className={
                   active
@@ -136,11 +163,29 @@ export function TransactionsPage() {
           transactions={transactionsQuery.data?.transactions ?? []}
           total={transactionsQuery.data?.total ?? 0}
           categories={categoriesQuery.data ?? []}
+          integrations={integrationsQuery.data ?? []}
           loading={transactionsQuery.isLoading}
+          isFetching={transactionsQuery.isFetching}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onSortChange={(field) => {
+            const next = nextSortState(sortField, sortOrder, field);
+            setSortField(next.field);
+            setSortOrder(next.order);
+            setPage(0);
+          }}
           search={search}
           onSearchChange={setSearch}
           categoryFilter={categoryFilter}
-          onCategoryFilterChange={setCategoryFilter}
+          onCategoryFilterChange={(ids) => {
+            setCategoryFilter(ids);
+            setPage(0);
+          }}
+          accountFilter={accountFilter}
+          onAccountFilterChange={(ids) => {
+            setAccountFilter(ids);
+            setPage(0);
+          }}
           page={page}
           onPageChange={setPage}
         />

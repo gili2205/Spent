@@ -348,3 +348,76 @@ export function ensureCategory(
     description: null,
   };
 }
+
+export interface CategoryChildRef {
+  id: number;
+  name: string;
+}
+
+export function listCategoryChildren(
+  workspaceId: number,
+  parentId: number
+): CategoryChildRef[] {
+  return getDb()
+    .prepare(
+      `SELECT id, name FROM categories
+       WHERE workspace_id = ? AND parent_id = ?
+       ORDER BY name COLLATE NOCASE`
+    )
+    .all(workspaceId, parentId) as CategoryChildRef[];
+}
+
+export type DeleteCategoryResult =
+  | { ok: true; deletedCategoryId: number; unassignedTransactionCount: number }
+  | {
+      ok: false;
+      reason: "not-found" | "has-children";
+      children?: CategoryChildRef[];
+    };
+
+export function deleteCategory(
+  workspaceId: number,
+  categoryId: number
+): DeleteCategoryResult {
+  const db = getDb();
+  const category = getCategoryById(workspaceId, categoryId);
+  if (!category) {
+    return { ok: false, reason: "not-found" };
+  }
+
+  const children = listCategoryChildren(workspaceId, categoryId);
+  if (children.length > 0) {
+    return { ok: false, reason: "has-children", children };
+  }
+
+  const txnCountRow = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM transactions WHERE workspace_id = ? AND category_id = ?"
+    )
+    .get(workspaceId, categoryId) as { count: number };
+
+  const run = db.transaction(() => {
+    db.prepare(
+      `UPDATE transactions
+       SET category_id = NULL, category_source = NULL, updated_at = datetime('now')
+       WHERE workspace_id = ? AND category_id = ?`
+    ).run(workspaceId, categoryId);
+
+    db.prepare("DELETE FROM budgets WHERE category_id = ?").run(categoryId);
+    db.prepare(
+      "DELETE FROM merchant_categories WHERE workspace_id = ? AND category_id = ?"
+    ).run(workspaceId, categoryId);
+
+    db.prepare(
+      "DELETE FROM categories WHERE workspace_id = ? AND id = ?"
+    ).run(workspaceId, categoryId);
+  });
+
+  run();
+
+  return {
+    ok: true,
+    deletedCategoryId: categoryId,
+    unassignedTransactionCount: txnCountRow.count,
+  };
+}

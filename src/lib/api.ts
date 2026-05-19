@@ -67,14 +67,22 @@ export function getSetupStatus() {
 export function saveBankCredentials(
   provider: string,
   credentials: Record<string, string>,
-  options?: { requiresManualTwoFactor?: boolean }
+  options?: {
+    label?: string;
+    credentialId?: number;
+    requiresManualTwoFactor?: boolean;
+  }
 ) {
-  return fetchJSON<{ success: boolean }>("/api/setup/bank", {
+  return fetchJSON<{ success: boolean; credentialId: number }>("/api/setup/bank", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       provider,
       credentials,
+      ...(options?.label !== undefined ? { label: options.label } : {}),
+      ...(options?.credentialId !== undefined
+        ? { credentialId: options.credentialId }
+        : {}),
       ...(options?.requiresManualTwoFactor !== undefined
         ? { requiresManualTwoFactor: options.requiresManualTwoFactor }
         : {}),
@@ -83,10 +91,10 @@ export function saveBankCredentials(
 }
 
 export function updateIntegrationSettings(
-  provider: string,
+  credentialId: number,
   updates: { requiresManualTwoFactor?: boolean; resetTwoFactorToken?: boolean }
 ) {
-  return fetchJSON<{ success: boolean }>(`/api/integrations/${provider}`, {
+  return fetchJSON<{ success: boolean }>(`/api/integrations/${credentialId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
@@ -101,7 +109,10 @@ export function submitSyncOtp(syncRunId: number, code: string) {
   });
 }
 
-export function testBankConnection(provider: string) {
+export function testBankConnection(
+  provider: string,
+  options?: { credentialId?: number; credentials?: Record<string, string> }
+) {
   return fetchJSON<{
     success: boolean;
     message: string;
@@ -109,7 +120,15 @@ export function testBankConnection(provider: string) {
   }>("/api/setup/bank/test", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({
+      provider,
+      ...(options?.credentialId !== undefined
+        ? { credentialId: options.credentialId }
+        : {}),
+      ...(options?.credentials !== undefined
+        ? { credentials: options.credentials }
+        : {}),
+    }),
   });
 }
 
@@ -158,8 +177,17 @@ export interface TransactionsSummary {
   pendingReviewCount: number;
 }
 
-export function getTransactionsSummary(params: { from: string; to: string }) {
+export function getTransactionsSummary(params: {
+  from: string;
+  to: string;
+  credentialIds?: number[];
+}) {
   const sp = new URLSearchParams({ from: params.from, to: params.to });
+  if (params.credentialIds?.length) {
+    for (const id of params.credentialIds) {
+      sp.append("credentialIds", String(id));
+    }
+  }
   return fetchJSON<TransactionsSummary>(`/api/transactions/summary?${sp}`);
 }
 
@@ -175,12 +203,16 @@ export function getTransactions(params: {
   offset?: number;
   kind?: TransactionKindFilter;
   provider?: string;
+  credentialIds?: number[];
 }) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined) return;
-    if (key === "categoryIds" && Array.isArray(value)) {
-      for (const id of value) searchParams.append("categoryIds", String(id));
+    if (
+      (key === "categoryIds" || key === "credentialIds") &&
+      Array.isArray(value)
+    ) {
+      for (const id of value) searchParams.append(key, String(id));
       return;
     }
     searchParams.set(key, String(value));
@@ -374,18 +406,30 @@ export function deleteAllTransactions() {
   });
 }
 
-export function deleteIntegration(provider: string) {
-  return fetchJSON<{ success: boolean }>(`/api/integrations/${provider}`, {
+export function deleteIntegration(credentialId: number) {
+  return fetchJSON<{ success: boolean }>(`/api/integrations/${credentialId}`, {
     method: "DELETE",
   });
 }
 
-export function getIntegrationCredentials(provider: string) {
+export function getIntegrationCredentials(credentialId: number) {
   return fetchJSON<{
     credentials: Record<string, string> | null;
+    label: string | null;
+    provider: string | null;
     requiresManualTwoFactor: boolean;
     hasTwoFactorToken: boolean;
-  }>(`/api/integrations/${provider}`);
+  }>(`/api/integrations/${credentialId}`);
+}
+
+export function deleteCategory(categoryId: number) {
+  return fetchJSON<{
+    success: boolean;
+    deletedCategoryId: number;
+    unassignedTransactionCount: number;
+  }>(`/api/categories/${categoryId}`, {
+    method: "DELETE",
+  });
 }
 
 export interface CategorizeAssignment {
@@ -455,7 +499,7 @@ export interface SyncProgressEvent {
 }
 
 export function startSync(
-  provider: string | undefined,
+  credentialId: number | undefined,
   onEvent: (event: SyncProgressEvent) => void
 ): { cancel: () => void } {
   const controller = new AbortController();
@@ -467,7 +511,9 @@ export function startSync(
         withWorkspaceHeader({
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(provider ? { provider } : {}),
+          body: JSON.stringify(
+            credentialId != null ? { credentialId } : {}
+          ),
           signal: controller.signal,
         })
       );

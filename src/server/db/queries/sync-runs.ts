@@ -6,14 +6,15 @@ import type { SyncRun } from "@/lib/types";
 export function createSyncRun(
   workspaceId: number,
   provider: string,
+  credentialId: number,
   scrapeFromDate: string
 ): number {
   const result = getDb()
     .prepare(
-      `INSERT INTO sync_runs (workspace_id, provider, started_at, status, scrape_from_date)
-       VALUES (?, ?, datetime('now'), 'running', ?)`
+      `INSERT INTO sync_runs (workspace_id, provider, credential_id, started_at, status, scrape_from_date)
+       VALUES (?, ?, ?, datetime('now'), 'running', ?)`
     )
-    .run(workspaceId, provider, scrapeFromDate);
+    .run(workspaceId, provider, credentialId, scrapeFromDate);
   return Number(result.lastInsertRowid);
 }
 
@@ -49,25 +50,27 @@ interface ProviderStats {
   transactionCount: number;
 }
 
-export function getProviderStats(
+export function getCredentialStats(
   workspaceId: number,
+  credentialId: number,
   provider: string
 ): ProviderStats {
   const db = getDb();
   const lastRun = db
     .prepare(
       `SELECT completed_at, status FROM sync_runs
-       WHERE workspace_id = ? AND provider = ? AND status = 'completed'
+       WHERE workspace_id = ? AND credential_id = ? AND status = 'completed'
        ORDER BY started_at DESC LIMIT 1`
     )
-    .get(workspaceId, provider) as
+    .get(workspaceId, credentialId) as
     | { completed_at: string; status: string }
     | undefined;
   const txnCount = db
     .prepare(
-      `SELECT COUNT(*) as count FROM transactions WHERE workspace_id = ? AND provider = ?`
+      `SELECT COUNT(*) as count FROM transactions
+       WHERE workspace_id = ? AND credential_id = ?`
     )
-    .get(workspaceId, provider) as { count: number };
+    .get(workspaceId, credentialId) as { count: number };
   return {
     provider,
     lastSyncAt: lastRun?.completed_at ?? null,

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
+  defaultLabelForProvider,
   getBankCredentials,
+  getBankCredentialMeta,
   saveBankCredentials,
 } from "@/server/db/queries/bank-credentials";
 import { BANK_PROVIDERS } from "@/lib/types";
@@ -11,6 +13,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     provider: string;
     credentials: Record<string, string>;
+    label?: string;
+    credentialId?: number;
     requiresManualTwoFactor?: boolean;
   };
 
@@ -21,12 +25,22 @@ export async function POST(request: Request) {
     );
   }
 
-  // If any password-type field is blank, keep the existing value.
-  // Lets users update non-secret fields without retyping their password.
   const info = BANK_PROVIDERS.find((b) => b.id === body.provider);
   const passwordKeys =
     info?.credentialFields.filter((f) => f.type === "password").map((f) => f.key) ?? [];
-  const existing = getBankCredentials(workspaceId, body.provider);
+
+  const credentialId = body.credentialId;
+  const existing =
+    credentialId != null
+      ? getBankCredentials(workspaceId, credentialId)
+      : null;
+
+  if (credentialId != null && !getBankCredentialMeta(workspaceId, credentialId)) {
+    return NextResponse.json(
+      { success: false, message: "Credential not found" },
+      { status: 404 }
+    );
+  }
 
   const merged: Record<string, string> = { ...body.credentials };
   for (const key of passwordKeys) {
@@ -37,7 +51,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Reject if we still don't have a value for required password fields
   for (const key of passwordKeys) {
     if (!merged[key]) {
       return NextResponse.json(
@@ -47,16 +60,36 @@ export async function POST(request: Request) {
     }
   }
 
-  // Preserve any previously stored long-term OTP token across credential
-  // updates. Users edit email/password/phone independently of the token, and
-  // the form never sends it back.
   if (existing?.otpLongTermToken && !merged.otpLongTermToken) {
     merged.otpLongTermToken = existing.otpLongTermToken;
   }
 
-  saveBankCredentials(workspaceId, body.provider, merged, {
-    requiresManualTwoFactor: body.requiresManualTwoFactor,
-  });
+  const label =
+    body.label?.trim() ||
+    (credentialId != null
+      ? getBankCredentialMeta(workspaceId, credentialId)?.label
+      : defaultLabelForProvider(workspaceId, body.provider)) ||
+    defaultLabelForProvider(workspaceId, body.provider);
 
-  return NextResponse.json({ success: true });
+  try {
+    const id = saveBankCredentials(workspaceId, body.provider, merged, {
+      credentialId,
+      label,
+      requiresManualTwoFactor: body.requiresManualTwoFactor,
+    });
+    return NextResponse.json({ success: true, credentialId: id });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to save credentials";
+    if (/UNIQUE constraint/i.test(message)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "An account with this label already exists for this bank.",
+        },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }

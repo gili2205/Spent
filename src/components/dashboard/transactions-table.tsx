@@ -21,13 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -40,6 +33,8 @@ import {
   Check,
   ArrowDownRight,
   ArrowUpRight,
+  Wallet,
+  Tags,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -49,8 +44,26 @@ import {
   approveTransactionCategory,
   getCategories,
 } from "@/lib/api";
-import { translateCategoryName } from "@/lib/i18n-data";
-import type { TransactionWithCategory, Category } from "@/lib/types";
+import { translateCategoryName, translateProviderName } from "@/lib/i18n-data";
+import {
+  getAccountDisplayLabel,
+  TransactionSourceCell,
+} from "@/components/transactions/transaction-source-cell";
+import {
+  TransactionMultiFilter,
+  MultiFilterOption,
+} from "@/components/transactions/transaction-multi-filter";
+import { formatMultiFilterDisplay } from "@/lib/transaction-filters";
+import { SortableTableHead } from "@/components/transactions/sortable-table-head";
+import type { SortOrder, TransactionSortField } from "@/lib/transaction-sort";
+import { cn } from "@/lib/utils";
+import { ProviderBadge } from "@/components/setup/provider-badge";
+import type {
+  TransactionWithCategory,
+  Category,
+  Integration,
+} from "@/lib/types";
+import { BANK_PROVIDERS } from "@/lib/types";
 import type { Locale } from "@/i18n/routing";
 
 type Kind = "expense" | "income" | "transfer";
@@ -59,13 +72,20 @@ interface TransactionsTableProps {
   transactions: TransactionWithCategory[];
   total: number;
   categories: Category[];
+  integrations: Integration[];
   loading: boolean;
   search: string;
   onSearchChange: (search: string) => void;
-  categoryFilter: number | undefined;
-  onCategoryFilterChange: (category: number | undefined) => void;
+  categoryFilter: number[];
+  onCategoryFilterChange: (categoryIds: number[]) => void;
+  accountFilter: number[];
+  onAccountFilterChange: (credentialIds: number[]) => void;
   page: number;
   onPageChange: (page: number) => void;
+  sortField: TransactionSortField;
+  sortOrder: SortOrder;
+  onSortChange: (field: TransactionSortField) => void;
+  isFetching?: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -74,16 +94,24 @@ export function TransactionsTable({
   transactions,
   total,
   categories,
+  integrations,
   loading,
   search,
   onSearchChange,
   categoryFilter,
   onCategoryFilterChange,
+  accountFilter,
+  onAccountFilterChange,
   page,
   onPageChange,
+  sortField,
+  sortOrder,
+  onSortChange,
+  isFetching = false,
 }: TransactionsTableProps) {
   const t = useTranslations("transactions");
   const tCat = useTranslations("categoriesSeeded");
+  const tBanks = useTranslations("banks");
   const locale = useLocale() as Locale;
   const queryClient = useQueryClient();
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -156,6 +184,63 @@ export function TransactionsTable({
     return [];
   };
 
+  const accountOptions = integrations
+    .map((integration) => {
+      const info = BANK_PROVIDERS.find((b) => b.id === integration.provider);
+      const providerName = translateProviderName(
+        integration.provider,
+        info?.name ?? integration.provider,
+        tBanks
+      );
+      const { primary } = getAccountDisplayLabel(
+        providerName,
+        integration.label
+      );
+      return { integration, info, providerName, primary };
+    })
+    .sort((a, b) => a.primary.localeCompare(b.primary));
+
+  const showAccountFilter = accountOptions.length > 1;
+
+  const toggleFilterId = (ids: number[], id: number): number[] =>
+    ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+
+  const accountLabels = accountFilter
+    .map(
+      (id) =>
+        accountOptions.find((o) => o.integration.id === id)?.primary
+    )
+    .filter((name): name is string => name != null);
+
+  const accountDisplayValue = formatMultiFilterDisplay(
+    accountLabels,
+    t("filterAny"),
+    (count) => t("filterSelectedCount", { count })
+  );
+
+  const categoryLabels = categoryFilter
+    .map((id) => categories.find((c) => c.id === id))
+    .filter((c): c is Category => c != null)
+    .map((c) => translateCategoryName(c.name, tCat));
+
+  const categoryDisplayValue = formatMultiFilterDisplay(
+    categoryLabels,
+    t("filterAny"),
+    (count) => t("filterSelectedCount", { count })
+  );
+
+  const hasActiveFilters =
+    categoryFilter.length > 0 || accountFilter.length > 0;
+
+  const handleClearFilters = () => {
+    onCategoryFilterChange([]);
+    onAccountFilterChange([]);
+    onPageChange(0);
+  };
+
+  const allCategoryIds = categories.map((c) => c.id);
+  const allAccountIds = accountOptions.map((o) => o.integration.id);
+
   return (
     <Card className="rounded-2xl border border-border bg-card shadow-none">
       <CardHeader>
@@ -173,20 +258,53 @@ export function TransactionsTable({
               }}
               className="h-8 w-[200px]"
             />
-            <Select
-              value={categoryFilter ? String(categoryFilter) : "all"}
-              onValueChange={(v) => {
-                if (!v) return;
-                onCategoryFilterChange(v === "all" ? undefined : Number(v));
-                onPageChange(0);
-              }}
+            {showAccountFilter ? (
+              <TransactionMultiFilter
+                label={t("filterAccount")}
+                icon={Wallet}
+                displayValue={accountDisplayValue}
+                triggerClassName="w-[200px]"
+                selectAllLabel={t("filterSelectAll")}
+                clearLabel={t("filterClearSelection")}
+                onSelectAll={() => onAccountFilterChange(allAccountIds)}
+                onClear={() => onAccountFilterChange([])}
+              >
+                {accountOptions.map(({ integration, info, primary }) => (
+                  <MultiFilterOption
+                    key={integration.id}
+                    selected={accountFilter.includes(integration.id)}
+                    onToggle={() =>
+                      onAccountFilterChange(
+                        toggleFilterId(accountFilter, integration.id)
+                      )
+                    }
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      {info ? (
+                        <ProviderBadge
+                          color={info.color}
+                          name={primary}
+                          domain={info.domain}
+                          size={16}
+                          radius={5}
+                        />
+                      ) : null}
+                      <span className="truncate">{primary}</span>
+                    </div>
+                  </MultiFilterOption>
+                ))}
+              </TransactionMultiFilter>
+            ) : null}
+            <TransactionMultiFilter
+              label={t("filterCategory")}
+              icon={Tags}
+              displayValue={categoryDisplayValue}
+              selectAllLabel={t("filterSelectAll")}
+              clearLabel={t("filterClearSelection")}
+              onSelectAll={() => onCategoryFilterChange(allCategoryIds)}
+              onClear={() => onCategoryFilterChange([])}
             >
-              <SelectTrigger className="h-8 w-[160px]">
-                <SelectValue placeholder={t("allCategories")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allCategories")}</SelectItem>
-                {(() => {
+              {(() => {
                   const parentIds = new Set(
                     categories
                       .map((c) => c.parentId)
@@ -209,7 +327,15 @@ export function TransactionsTable({
                     const topName = translateCategoryName(top.name, tCat);
                     if (parentIds.has(top.id)) {
                       nodes.push(
-                        <SelectItem key={top.id} value={String(top.id)}>
+                        <MultiFilterOption
+                          key={top.id}
+                          selected={categoryFilter.includes(top.id)}
+                          onToggle={() =>
+                            onCategoryFilterChange(
+                              toggleFilterId(categoryFilter, top.id)
+                            )
+                          }
+                        >
                           <div className="flex items-center gap-2 font-semibold">
                             <div
                               className="h-2 w-2 rounded-full"
@@ -217,13 +343,19 @@ export function TransactionsTable({
                             />
                             {topName}
                           </div>
-                        </SelectItem>
+                        </MultiFilterOption>
                       );
                       for (const child of kids) {
                         nodes.push(
-                          <SelectItem
+                          <MultiFilterOption
                             key={child.id}
-                            value={String(child.id)}
+                            selected={categoryFilter.includes(child.id)}
+                            onToggle={() =>
+                              onCategoryFilterChange(
+                                toggleFilterId(categoryFilter, child.id)
+                              )
+                            }
+                            className="ps-2"
                           >
                             <div className="flex items-center gap-2 ps-3">
                               <div
@@ -232,12 +364,20 @@ export function TransactionsTable({
                               />
                               {translateCategoryName(child.name, tCat)}
                             </div>
-                          </SelectItem>
+                          </MultiFilterOption>
                         );
                       }
                     } else {
                       nodes.push(
-                        <SelectItem key={top.id} value={String(top.id)}>
+                        <MultiFilterOption
+                          key={top.id}
+                          selected={categoryFilter.includes(top.id)}
+                          onToggle={() =>
+                            onCategoryFilterChange(
+                              toggleFilterId(categoryFilter, top.id)
+                            )
+                          }
+                        >
                           <div className="flex items-center gap-2">
                             <div
                               className="h-2 w-2 rounded-full"
@@ -245,14 +385,24 @@ export function TransactionsTable({
                             />
                             {topName}
                           </div>
-                        </SelectItem>
+                        </MultiFilterOption>
                       );
                     }
                   }
                   return nodes;
                 })()}
-              </SelectContent>
-            </Select>
+            </TransactionMultiFilter>
+            {hasActiveFilters ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-xs text-muted-foreground"
+                onClick={handleClearFilters}
+              >
+                {t("filterClear")}
+              </Button>
+            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -265,7 +415,7 @@ export function TransactionsTable({
           </div>
         ) : transactions.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            {search || categoryFilter
+            {search || categoryFilter.length > 0 || accountFilter.length > 0
               ? t("emptyWithFilters")
               : t("emptyNoData")}
           </div>
@@ -275,16 +425,64 @@ export function TransactionsTable({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[32px]" />
-                  <TableHead className="w-[100px]">{t("headerDate")}</TableHead>
-                  <TableHead>{t("headerDescription")}</TableHead>
-                  <TableHead className="w-[150px]">{t("headerCategory")}</TableHead>
-                  <TableHead className="w-[120px] text-end">
-                    {t("headerAmount")}
-                  </TableHead>
+                  <SortableTableHead
+                    label={t("headerDate")}
+                    field="date"
+                    activeField={sortField}
+                    activeOrder={sortOrder}
+                    onSort={onSortChange}
+                    className="w-[100px]"
+                    sortAscLabel={t("sortAsc")}
+                    sortDescLabel={t("sortDesc")}
+                  />
+                  <SortableTableHead
+                    label={t("headerDescription")}
+                    field="description"
+                    activeField={sortField}
+                    activeOrder={sortOrder}
+                    onSort={onSortChange}
+                    sortAscLabel={t("sortAsc")}
+                    sortDescLabel={t("sortDesc")}
+                  />
+                  <SortableTableHead
+                    label={t("headerCategory")}
+                    field="category_name"
+                    activeField={sortField}
+                    activeOrder={sortOrder}
+                    onSort={onSortChange}
+                    className="w-[150px]"
+                    sortAscLabel={t("sortAsc")}
+                    sortDescLabel={t("sortDesc")}
+                  />
+                  <SortableTableHead
+                    label={t("headerAccount")}
+                    field="account"
+                    activeField={sortField}
+                    activeOrder={sortOrder}
+                    onSort={onSortChange}
+                    className="hidden w-[130px] md:table-cell"
+                    sortAscLabel={t("sortAsc")}
+                    sortDescLabel={t("sortDesc")}
+                  />
+                  <SortableTableHead
+                    label={t("headerAmount")}
+                    field="charged_amount"
+                    activeField={sortField}
+                    activeOrder={sortOrder}
+                    onSort={onSortChange}
+                    className="w-[120px]"
+                    align="end"
+                    sortAscLabel={t("sortAsc")}
+                    sortDescLabel={t("sortDesc")}
+                  />
                   <TableHead className="w-[40px]" />
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody
+                className={cn(
+                  isFetching && !loading && "opacity-60 transition-opacity duration-200"
+                )}
+              >
                 {transactions.map((txn) => {
                   const isIncome = txn.chargedAmount > 0;
                   const directionColor = isIncome
@@ -413,6 +611,12 @@ export function TransactionsTable({
                             </Button>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <TransactionSourceCell
+                          provider={txn.provider}
+                          accountLabel={txn.accountLabel}
+                        />
                       </TableCell>
                       <TableCell
                         className="text-end font-medium tabular-nums"

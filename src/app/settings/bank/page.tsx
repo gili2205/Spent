@@ -26,11 +26,13 @@ import { listIntegrations } from "@/lib/api";
 import { BANK_PROVIDERS } from "@/lib/types";
 import { translateProviderName, useFormatterLabels } from "@/lib/i18n-data";
 import { formatLastSync } from "@/lib/formatters";
+import type { Integration } from "@/lib/types";
 
 interface SheetState {
   open: boolean;
   mode: "edit" | "add";
   providerId: string | null;
+  credentialId: number | null;
 }
 
 export default function BankSettingsPage() {
@@ -47,6 +49,7 @@ export default function BankSettingsPage() {
     open: false,
     mode: "edit",
     providerId: null,
+    credentialId: null,
   });
 
   const lastSync = useMemo(() => {
@@ -57,18 +60,15 @@ export default function BankSettingsPage() {
     return stamps.sort().slice(-1)[0];
   }, [integrations]);
 
-  const connectedProviders = new Set(integrations.map((i) => i.provider));
-  const availableToAdd = BANK_PROVIDERS.filter(
-    (b) => b.enabled && !connectedProviders.has(b.id)
-  );
+  const availableToAdd = BANK_PROVIDERS.filter((b) => b.enabled);
 
   const handleSyncAll = () => {
-    integrations.forEach((i) => start(i.provider));
+    integrations.forEach((i) => start(i.id));
   };
 
-  const sheetIntegration =
-    sheet.mode === "edit" && sheet.providerId
-      ? integrations.find((i) => i.provider === sheet.providerId) ?? null
+  const sheetIntegration: Integration | null =
+    sheet.mode === "edit" && sheet.credentialId != null
+      ? integrations.find((i) => i.id === sheet.credentialId) ?? null
       : null;
 
   const countLabel =
@@ -121,6 +121,7 @@ export default function BankSettingsPage() {
                           open: true,
                           mode: "add",
                           providerId: b.id,
+                          credentialId: null,
                         })
                       }
                     >
@@ -142,7 +143,7 @@ export default function BankSettingsPage() {
         {integrations.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
             {t.rich("noneConnectedPrompt", {
-              addBankBold: () => <b>{t("addBank")}</b>,
+              addBankBold: (chunks) => <b>{chunks}</b>,
             })}
           </div>
         ) : (
@@ -153,13 +154,14 @@ export default function BankSettingsPage() {
                   (b) => b.id === integration.provider
                 );
                 if (!info) return null;
-                const sync = stateFor(integration.provider);
+                const sync = stateFor(integration.id);
                 const localName = translateProviderName(info.id, info.name, tBanks);
                 const openSheet = () =>
                   setSheet({
                     open: true,
                     mode: "edit",
                     providerId: integration.provider,
+                    credentialId: integration.id,
                   });
                 const subline = integration.lastSyncAt
                   ? t("transactionsCountWithSync", {
@@ -171,13 +173,15 @@ export default function BankSettingsPage() {
                     });
                 return (
                   <li
-                    key={integration.provider}
+                    key={integration.id}
                     className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
                   >
                     <button
                       type="button"
                       onClick={openSheet}
-                      aria-label={t("openDetails", { name: localName })}
+                      aria-label={t("openDetails", {
+                        name: `${integration.label} (${localName})`,
+                      })}
                       className="flex min-w-0 flex-1 items-center gap-3 text-start"
                     >
                       <ProviderBadge
@@ -189,13 +193,15 @@ export default function BankSettingsPage() {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
-                          {localName}
+                          {integration.label}
                           <StatusPill
                             lastSyncAt={integration.lastSyncAt}
                             syncing={sync.syncing}
                           />
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {localName}
+                          {" · "}
                           {subline}
                         </div>
                       </div>
@@ -203,12 +209,14 @@ export default function BankSettingsPage() {
                     <SyncShortButton
                       syncing={sync.syncing}
                       stage={sync.stage}
-                      onClick={() => start(integration.provider)}
+                      onClick={() => start(integration.id)}
                     />
                     <button
                       type="button"
                       onClick={openSheet}
-                      aria-label={t("openDetails", { name: localName })}
+                      aria-label={t("openDetails", {
+                        name: `${integration.label} (${localName})`,
+                      })}
                       className="-me-1 shrink-0 rounded-md p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
                     >
                       <ChevronRight className="h-4 w-4 rtl:rotate-180" />
@@ -225,6 +233,7 @@ export default function BankSettingsPage() {
         open={sheet.open}
         mode={sheet.mode}
         providerId={sheet.providerId}
+        credentialId={sheet.credentialId}
         connected={sheetIntegration}
         onClose={() => setSheet((s) => ({ ...s, open: false }))}
       />

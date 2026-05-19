@@ -44,6 +44,9 @@ export function BankStep({ onComplete }: BankStepProps) {
   const [filter, setFilter] = useState<"all" | BankKind>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingCredentialId, setEditingCredentialId] = useState<number | null>(
+    null
+  );
   const [sub, setSub] = useState<Sub | null>(null);
 
   const { data: integrations = [], isPending, refetch } = useQuery({
@@ -76,24 +79,35 @@ export function BankStep({ onComplete }: BankStepProps) {
 
   function handlePick(id: string) {
     setSelectedId(id);
+    setEditingCredentialId(null);
     setSub("form");
   }
 
   function handleCloseForm() {
     setSelectedId(null);
+    setEditingCredentialId(null);
     setSub(integrations.length > 0 ? "ready" : "pick");
   }
 
   function handleSaved() {
     refetch();
     setSelectedId(null);
+    setEditingCredentialId(null);
     setSub("ready");
   }
 
-  function handleEdit(id: string) {
-    setSelectedId(id);
+  function handleEditCredential(credentialId: number) {
+    const integ = integrations.find((i) => i.id === credentialId);
+    if (!integ) return;
+    setSelectedId(integ.provider);
+    setEditingCredentialId(credentialId);
     setSub("form");
   }
+
+  const editingIntegration =
+    editingCredentialId != null
+      ? integrations.find((i) => i.id === editingCredentialId) ?? null
+      : null;
 
   function handleRemoved() {
     refetch();
@@ -193,8 +207,11 @@ export function BankStep({ onComplete }: BankStepProps) {
             </header>
 
             <CredentialForm
+              key={`${selected.id}-${editingCredentialId ?? "new"}`}
               info={selected}
-              isEdit={connectedIds.has(selected.id)}
+              credentialId={editingCredentialId}
+              initialLabel={editingIntegration?.label ?? ""}
+              isEdit={editingCredentialId != null}
               onClose={handleCloseForm}
               onSaved={handleSaved}
             />
@@ -230,7 +247,7 @@ export function BankStep({ onComplete }: BankStepProps) {
                   if (!info) return null;
                   return (
                     <motion.div
-                      key={integ.provider}
+                      key={integ.id}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -16, height: 0 }}
@@ -246,11 +263,10 @@ export function BankStep({ onComplete }: BankStepProps) {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-bold tracking-tight">
-                          {info.name}
+                          {integ.label}
                         </div>
                         <div className="mt-0.5 text-[11px] text-muted-foreground">
-                          {info.kind === "bank" ? "Bank" : "Credit cards"} ·{" "}
-                          {info.credentialFields.length} credentials
+                          {info.name}
                         </div>
                       </div>
                       <span className="rounded-full bg-primary/15 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-primary">
@@ -258,13 +274,13 @@ export function BankStep({ onComplete }: BankStepProps) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleEdit(info.id)}
+                        onClick={() => handleEditCredential(integ.id)}
                         className="rounded-md px-2 py-1 text-xs font-medium hover:bg-accent"
                       >
                         Edit
                       </button>
                       <RemoveButton
-                        provider={integ.provider}
+                        credentialId={integ.id}
                         onRemoved={handleRemoved}
                       />
                     </motion.div>
@@ -442,16 +458,24 @@ function FilterPills({
 
 function CredentialForm({
   info,
+  credentialId,
+  initialLabel,
   isEdit,
   onClose,
   onSaved,
 }: {
   info: BankProviderInfo;
+  credentialId: number | null;
+  initialLabel: string;
   isEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [label, setLabel] = useState(initialLabel);
+  const [savedCredentialId, setSavedCredentialId] = useState<number | null>(
+    credentialId
+  );
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [requiresManualTwoFactor, setRequiresManualTwoFactor] = useState(false);
   const [loaded, setLoaded] = useState(!isEdit);
@@ -463,13 +487,18 @@ function CredentialForm({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isEdit) return;
+    setSavedCredentialId(credentialId);
+  }, [credentialId]);
+
+  useEffect(() => {
+    if (!isEdit || credentialId == null) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await getIntegrationCredentials(info.id);
+        const res = await getIntegrationCredentials(credentialId);
         if (cancelled) return;
         if (res.credentials) setCredentials(res.credentials);
+        if (res.label) setLabel(res.label);
         setRequiresManualTwoFactor(res.requiresManualTwoFactor);
       } finally {
         if (!cancelled) setLoaded(true);
@@ -478,13 +507,21 @@ function CredentialForm({
     return () => {
       cancelled = true;
     };
-  }, [isEdit, info.id]);
+  }, [isEdit, credentialId]);
 
-  const valid = info.credentialFields.every((f) => {
+  const valid =
+    label.trim().length > 0 &&
+    info.credentialFields.every((f) => {
     const v = credentials[f.key]?.trim() ?? "";
     if (!v) return false;
     if (f.exactLength != null && v.length !== f.exactLength) return false;
     return true;
+    });
+
+  const saveOptions = (id: number | null) => ({
+    label: label.trim(),
+    ...(id != null ? { credentialId: id } : {}),
+    requiresManualTwoFactor,
   });
 
   const handleTest = async () => {
@@ -492,10 +529,20 @@ function CredentialForm({
     setStatus("idle");
     setErrorMsg(null);
     try {
-      await saveBankCredentials(info.id, credentials, {
-        requiresManualTwoFactor,
+      const existingId = savedCredentialId;
+      let testId = existingId;
+      if (existingId != null) {
+        const saved = await saveBankCredentials(
+          info.id,
+          credentials,
+          saveOptions(existingId)
+        );
+        testId = saved.credentialId;
+        setSavedCredentialId(testId);
+      }
+      const res = await testBankConnection(info.id, {
+        ...(testId != null ? { credentialId: testId } : { credentials }),
       });
-      const res = await testBankConnection(info.id);
       if (res.success) {
         setStatus("testing-ok");
       } else {
@@ -513,9 +560,12 @@ function CredentialForm({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await saveBankCredentials(info.id, credentials, {
-        requiresManualTwoFactor,
-      });
+      const saved = await saveBankCredentials(
+        info.id,
+        credentials,
+        saveOptions(savedCredentialId)
+      );
+      setSavedCredentialId(saved.credentialId);
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
       setStatus("saved");
       setTimeout(onSaved, 500);
@@ -561,6 +611,15 @@ function CredentialForm({
         </div>
       ) : (
         <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${info.id}-label`}>Account label</Label>
+            <Input
+              id={`${info.id}-label`}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={`e.g. Personal card, ${info.name} (2)`}
+            />
+          </div>
           {info.credentialFields.map((field) => {
             const value = credentials[field.key] ?? "";
             const tooShort =
@@ -687,10 +746,10 @@ function CredentialForm({
 }
 
 function RemoveButton({
-  provider,
+  credentialId,
   onRemoved,
 }: {
-  provider: string;
+  credentialId: number;
   onRemoved: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -721,7 +780,7 @@ function RemoveButton({
         type="button"
         onClick={async () => {
           setRemoving(true);
-          await deleteIntegration(provider);
+          await deleteIntegration(credentialId);
           setRemoving(false);
           onRemoved();
         }}

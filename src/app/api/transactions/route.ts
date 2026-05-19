@@ -23,6 +23,11 @@ export async function GET(request: Request) {
     .map((v) => Number(v))
     .filter((n) => Number.isFinite(n));
 
+  const credentialIds = searchParams
+    .getAll("credentialIds")
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
   const result = queryTransactions(workspaceId, {
     from: searchParams.get("from") ?? undefined,
     to: searchParams.get("to") ?? undefined,
@@ -41,6 +46,7 @@ export async function GET(request: Request) {
       : undefined,
     kind: parseKind(searchParams.get("kind")),
     provider: searchParams.get("provider") ?? undefined,
+    credentialIds: credentialIds.length > 0 ? credentialIds : undefined,
   });
 
   return NextResponse.json(result);
