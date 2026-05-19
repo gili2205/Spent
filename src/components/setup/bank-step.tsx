@@ -159,6 +159,15 @@ export function BankStep({ onComplete }: BankStepProps) {
               </p>
             </header>
 
+            <button
+              type="button"
+              onClick={() => setSub("csv")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/30 hover:text-foreground"
+            >
+              <Upload className="h-4 w-4" />
+              Prefer not to share credentials? Import from CSV instead
+            </button>
+
             <PickerCard
               providers={filteredProviders}
               total={BANK_PROVIDERS.length}
@@ -182,15 +191,6 @@ export function BankStep({ onComplete }: BankStepProps) {
               </a>{" "}
               and we&apos;ll add a scraper.
             </p>
-
-            <button
-              type="button"
-              onClick={() => setSub("csv")}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/30 hover:text-foreground"
-            >
-              <Upload className="h-4 w-4" />
-              Prefer not to share credentials? Import from CSV instead
-            </button>
           </div>
         )}
 
@@ -334,19 +334,29 @@ export function BankStep({ onComplete }: BankStepProps) {
               </AnimatePresence>
             </div>
 
-            <footer className="mt-2 flex items-center justify-between pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setSub("pick")}
+            <footer className="mt-2 flex flex-col gap-2 pt-2">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  onClick={() => setSub("pick")}
+                >
+                  + Add another account
+                </Button>
+                <Button
+                  onClick={onComplete}
+                  disabled={integrations.length === 0 && !csvImported}
+                >
+                  Continue to AI →
+                </Button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSub("csv")}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/30 hover:text-foreground"
               >
-                + Add another account
-              </Button>
-              <Button
-                onClick={onComplete}
-                disabled={integrations.length === 0 && !csvImported}
-              >
-                Continue to AI →
-              </Button>
+                <Upload className="h-3.5 w-3.5" />
+                Import transactions from CSV instead
+              </button>
             </footer>
           </div>
         )}
