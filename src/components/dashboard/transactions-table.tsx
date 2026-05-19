@@ -53,7 +53,12 @@ import {
   TransactionMultiFilter,
   MultiFilterOption,
 } from "@/components/transactions/transaction-multi-filter";
-import { formatMultiFilterDisplay } from "@/lib/transaction-filters";
+import {
+  formatMultiFilterDisplay,
+  getCategoryDescendantIds,
+  isCategoryFilterChecked,
+  toggleCategoryFilterSelection,
+} from "@/lib/transaction-filters";
 import { SortableTableHead } from "@/components/transactions/sortable-table-head";
 import type { SortOrder, TransactionSortField } from "@/lib/transaction-sort";
 import { cn } from "@/lib/utils";
@@ -238,8 +243,62 @@ export function TransactionsTable({
     onPageChange(0);
   };
 
-  const allCategoryIds = categories.map((c) => c.id);
+  const allCategoryIds = [
+    ...new Set(
+      categories.flatMap((c) => getCategoryDescendantIds(c.id, categories))
+    ),
+  ];
   const allAccountIds = accountOptions.map((o) => o.integration.id);
+
+  const renderCategoryFilterOptions = (
+    parentId: number | null,
+    depth: number
+  ): React.ReactNode[] => {
+    const items = categories
+      .filter((c) => c.parentId === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const nodes: React.ReactNode[] = [];
+    for (const cat of items) {
+      const hasChildren = categories.some((c) => c.parentId === cat.id);
+      const name = translateCategoryName(cat.name, tCat);
+      nodes.push(
+        <MultiFilterOption
+          key={cat.id}
+          selected={isCategoryFilterChecked(
+            cat.id,
+            categoryFilter,
+            categories
+          )}
+          onToggle={() =>
+            onCategoryFilterChange(
+              toggleCategoryFilterSelection(
+                categoryFilter,
+                cat.id,
+                categories
+              )
+            )
+          }
+          className={depth > 0 ? "ps-2" : undefined}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-2",
+              hasChildren && "font-semibold"
+            )}
+            style={{ paddingInlineStart: depth > 0 ? depth * 12 : 0 }}
+          >
+            <div
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: cat.color }}
+            />
+            {name}
+          </div>
+        </MultiFilterOption>
+      );
+      nodes.push(...renderCategoryFilterOptions(cat.id, depth + 1));
+    }
+    return nodes;
+  };
 
   return (
     <Card className="rounded-2xl border border-border bg-card shadow-none">
@@ -304,93 +363,7 @@ export function TransactionsTable({
               onSelectAll={() => onCategoryFilterChange(allCategoryIds)}
               onClear={() => onCategoryFilterChange([])}
             >
-              {(() => {
-                  const parentIds = new Set(
-                    categories
-                      .map((c) => c.parentId)
-                      .filter((p): p is number => p != null)
-                  );
-                  const childrenByParent = new Map<number, typeof categories>();
-                  for (const c of categories) {
-                    if (c.parentId != null) {
-                      const list = childrenByParent.get(c.parentId) ?? [];
-                      list.push(c);
-                      childrenByParent.set(c.parentId, list);
-                    }
-                  }
-                  const tops = categories
-                    .filter((c) => c.parentId == null)
-                    .sort((a, b) => a.name.localeCompare(b.name));
-                  const nodes: React.ReactNode[] = [];
-                  for (const top of tops) {
-                    const kids = childrenByParent.get(top.id) ?? [];
-                    const topName = translateCategoryName(top.name, tCat);
-                    if (parentIds.has(top.id)) {
-                      nodes.push(
-                        <MultiFilterOption
-                          key={top.id}
-                          selected={categoryFilter.includes(top.id)}
-                          onToggle={() =>
-                            onCategoryFilterChange(
-                              toggleFilterId(categoryFilter, top.id)
-                            )
-                          }
-                        >
-                          <div className="flex items-center gap-2 font-semibold">
-                            <div
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: top.color }}
-                            />
-                            {topName}
-                          </div>
-                        </MultiFilterOption>
-                      );
-                      for (const child of kids) {
-                        nodes.push(
-                          <MultiFilterOption
-                            key={child.id}
-                            selected={categoryFilter.includes(child.id)}
-                            onToggle={() =>
-                              onCategoryFilterChange(
-                                toggleFilterId(categoryFilter, child.id)
-                              )
-                            }
-                            className="ps-2"
-                          >
-                            <div className="flex items-center gap-2 ps-3">
-                              <div
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: child.color }}
-                              />
-                              {translateCategoryName(child.name, tCat)}
-                            </div>
-                          </MultiFilterOption>
-                        );
-                      }
-                    } else {
-                      nodes.push(
-                        <MultiFilterOption
-                          key={top.id}
-                          selected={categoryFilter.includes(top.id)}
-                          onToggle={() =>
-                            onCategoryFilterChange(
-                              toggleFilterId(categoryFilter, top.id)
-                            )
-                          }
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: top.color }}
-                            />
-                            {topName}
-                          </div>
-                        </MultiFilterOption>
-                      );
-                    }
-                  }
-                  return nodes;
-                })()}
+              {renderCategoryFilterOptions(null, 0)}
             </TransactionMultiFilter>
             {hasActiveFilters ? (
               <Button
