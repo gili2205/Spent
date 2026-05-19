@@ -41,7 +41,7 @@ export function insertTransactions(
   workspaceId: number,
   transactions: RawTransaction[],
   provider: string,
-  credentialId: number,
+  credentialId: number | null,
   syncRunId: number
 ): InsertResult {
   const db = getDb();

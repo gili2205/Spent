@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FileText, Upload, X } from "lucide-react";
 import {
   BANK_PROVIDERS,
   type BankKind,
@@ -17,11 +18,13 @@ import {
   testBankConnection,
   getIntegrationCredentials,
   deleteIntegration,
+  importCsv,
 } from "@/lib/api";
 import { ProviderBadge } from "./provider-badge";
 import { TwoFactorSection } from "./two-factor-section";
+import { toast } from "sonner";
 
-type Sub = "pick" | "form" | "ready";
+type Sub = "pick" | "form" | "ready" | "csv";
 
 const NUMBER_WORDS: Record<number, string> = {
   1: "One",
@@ -48,6 +51,7 @@ export function BankStep({ onComplete }: BankStepProps) {
     null
   );
   const [sub, setSub] = useState<Sub | null>(null);
+  const [csvImported, setCsvImported] = useState(false);
 
   const { data: integrations = [], isPending, refetch } = useQuery({
     queryKey: ["integrations"],
@@ -119,8 +123,9 @@ export function BankStep({ onComplete }: BankStepProps) {
 
   if (sub == null) return null;
 
-  const readyCountLabel =
-    integrations.length === 1
+  const readyCountLabel = csvImported && integrations.length === 0
+    ? "CSV imported. Move on or connect a bank too."
+    : integrations.length === 1
       ? "One account ready. Add another or move on."
       : `${NUMBER_WORDS[integrations.length] ?? integrations.length} accounts ready. Add another or move on.`;
 
@@ -177,6 +182,46 @@ export function BankStep({ onComplete }: BankStepProps) {
               </a>{" "}
               and we&apos;ll add a scraper.
             </p>
+
+            <button
+              type="button"
+              onClick={() => setSub("csv")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/30 hover:text-foreground"
+            >
+              <Upload className="h-4 w-4" />
+              Prefer not to share credentials? Import from CSV instead
+            </button>
+          </div>
+        )}
+
+        {sub === "csv" && (
+          <div key="csv" className="flex w-full flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => setSub(integrations.length > 0 ? "ready" : "pick")}
+              className="self-start text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              ← back
+            </button>
+            <header className="space-y-2">
+              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                Step 1 of 5 · Import CSV
+              </div>
+              <h1 className="font-serif text-4xl leading-[1.08] tracking-tight">
+                Import from your bank export
+              </h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Download your transaction history from your bank&apos;s website
+                and upload it here. Supported: Bank Hapoalim, Isracard, Max.
+                No credentials needed.
+              </p>
+            </header>
+            <CsvImportSubview
+              onImported={() => {
+                setCsvImported(true);
+                setSub("ready");
+              }}
+            />
           </div>
         )}
 
@@ -298,7 +343,7 @@ export function BankStep({ onComplete }: BankStepProps) {
               </Button>
               <Button
                 onClick={onComplete}
-                disabled={integrations.length === 0}
+                disabled={integrations.length === 0 && !csvImported}
               >
                 Continue to AI →
               </Button>
@@ -741,6 +786,105 @@ function CredentialForm({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CsvImportSubview({ onImported }: { onImported: () => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleImport = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const result = await importCsv(file);
+      toast.success(
+        `Imported ${result.added} transactions (${result.updated} updated, ${result.skipped} skipped)`
+      );
+      onImported();
+    } catch (err) {
+      let msg = err instanceof Error ? err.message : "Import failed";
+      try { msg = (JSON.parse(msg) as { error?: string }).error ?? msg; } catch { /* plain text */ }
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-full rounded-2xl border border-border bg-card p-6 text-start shadow-sm space-y-4">
+      <div
+        className={[
+          "relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+          dragging
+            ? "border-primary bg-primary/5"
+            : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/30",
+        ].join(" ")}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const dropped = e.dataTransfer.files[0];
+          if (dropped) setFile(dropped);
+        }}
+        onClick={() => !file && fileInputRef.current?.click()}
+        style={{ cursor: file ? "default" : "pointer" }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.txt"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setFile(f);
+            e.target.value = "";
+          }}
+        />
+        {file ? (
+          <div className="flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-sm">
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-left">{file.name}</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setFile(null); }}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <Upload className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Drop your CSV file here</p>
+              <p className="text-xs text-muted-foreground">or click to browse &middot; .csv files only</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <Button
+        className="w-full rounded-full"
+        disabled={!file || loading}
+        onClick={handleImport}
+      >
+        {loading ? "Importing..." : "Import transactions"}
+      </Button>
+
+      <div className="flex items-start gap-2 rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground">
+        <span>ℹ️</span>
+        <span>
+          Transactions are stored locally. You can also connect a bank account
+          above to enable automatic syncing.
+        </span>
+      </div>
     </div>
   );
 }

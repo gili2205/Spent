@@ -440,7 +440,15 @@
       "confirmInputPlaceholder": "delete",
       "deleteEverything": "מחיקת הכל",
       "deleteFailedFallback": "המחיקה נכשלה",
-      "deletedToast": "נמחקו {txCount} תנועות ו־{memoryCount} רשומות זיכרון"
+      "deletedToast": "נמחקו {txCount} תנועות ו־{memoryCount} רשומות זיכרון",
+      "importTitle": "ייבוא עסקאות מקובץ CSV",
+      "importDescription": "הורד את היסטוריית העסקאות מאתר הבנק שלך והעלה אותה כאן. נתמך: בנק הפועלים, ישראכארט, מקס. אין צורך בסיסמאות.",
+      "importDropLabel": "גרור לכאן את קובץ ה-CSV",
+      "importDropHint": "או לחץ לבחירת קובץ -- קבצי .csv בלבד",
+      "importButton": "ייבוא",
+      "importingLabel": "מייבא...",
+      "importSuccess": "יובאו {added} עסקאות חדשות ({updated} עודכנו, {skipped} דולגו)",
+      "importFailed": "הייבוא נכשל"
     }
   },
   "setup": {
@@ -714,8 +722,12 @@
         "placeholder": "הסיסמה שאתם משתמשים בה ב־digital.isracard.co.il",
         "hint": "אותה סיסמה שאתם משתמשים בה להתחברות באתר ישראכרט."
       },
-      "username": { "label": "שם משתמש" },
-      "userCode": { "label": "קוד משתמש" },
+      "username": {
+        "label": "שם משתמש"
+      },
+      "userCode": {
+        "label": "קוד משתמש"
+      },
       "num": {
         "label": "מספר חשבון",
         "discountPlaceholder": "מספר חשבון דיסקונט שלכם",

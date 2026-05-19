@@ -440,7 +440,15 @@
       "confirmInputPlaceholder": "delete",
       "deleteEverything": "Delete everything",
       "deleteFailedFallback": "Delete failed",
-      "deletedToast": "Deleted {txCount} transactions, {memoryCount} memory entries"
+      "deletedToast": "Deleted {txCount} transactions, {memoryCount} memory entries",
+      "importTitle": "Import transactions from CSV",
+      "importDescription": "Download your transaction history from your bank website and upload it here. Supported: Bank Hapoalim, Isracard, Max. No credentials needed.",
+      "importDropLabel": "Drop your CSV file here",
+      "importDropHint": "or click to browse -- .csv files only",
+      "importButton": "Import",
+      "importingLabel": "Importing...",
+      "importSuccess": "Imported {added} new transactions ({updated} updated, {skipped} skipped)",
+      "importFailed": "Import failed"
     }
   },
   "setup": {
@@ -714,8 +722,12 @@
         "placeholder": "Password you use on digital.isracard.co.il",
         "hint": "The same password you use to log in on the Isracard website."
       },
-      "username": { "label": "Username" },
-      "userCode": { "label": "User Code" },
+      "username": {
+        "label": "Username"
+      },
+      "userCode": {
+        "label": "User Code"
+      },
       "num": {
         "label": "Account Number",
         "discountPlaceholder": "Your Discount account number",

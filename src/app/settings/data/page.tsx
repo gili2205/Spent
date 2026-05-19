@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Switch } from "@/components/ui/switch";
@@ -13,10 +13,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Trash2, AlertTriangle } from "lucide-react";
+import { Trash2, AlertTriangle, Upload, FileText, X } from "lucide-react";
 import {
   deleteAllTransactions,
   getSettings,
+  importCsv,
   updateSettings,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -48,6 +49,7 @@ export default function DataSettingsPage() {
           <code>data/spent.db</code> · <code>data/.encryption-key</code>
         </div>
       </SettingCard>
+      <CsvImportCard />
       <DangerZone />
       <WorkspaceDangerCard />
     </SectionShell>
@@ -217,6 +219,110 @@ function DangerZone() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function CsvImportCard() {
+  const t = useTranslations("settings.data");
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => importCsv(file!),
+    onSuccess: (result) => {
+      toast.success(
+        t("importSuccess", { added: result.added, updated: result.updated, skipped: result.skipped })
+      );
+      queryClient.invalidateQueries();
+      setFile(null);
+    },
+    onError: (err) => {
+      const raw = err instanceof Error ? err.message : t("importFailed");
+      // The API wraps error in JSON: {"error":"..."} — try to parse it
+      let msg = raw;
+      try {
+        const parsed = JSON.parse(raw) as { error?: string };
+        if (parsed.error) msg = parsed.error;
+      } catch {
+        // raw is already plain text
+      }
+      toast.error(msg);
+    },
+  });
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) setFile(dropped);
+  };
+
+  return (
+    <SettingCard
+      title={t("importTitle")}
+      description={t("importDescription")}
+    >
+      <div
+        className={[
+          "relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+          dragging
+            ? "border-primary bg-primary/5"
+            : "border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/30",
+        ].join(" ")}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => !file && fileInputRef.current?.click()}
+        style={{ cursor: file ? "default" : "pointer" }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.txt"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setFile(f);
+            e.target.value = "";
+          }}
+        />
+
+        {file ? (
+          <div className="flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-sm">
+            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-left">{file.name}</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setFile(null); }}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+              <Upload className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{t("importDropLabel")}</p>
+              <p className="text-xs text-muted-foreground">{t("importDropHint")}</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <Button
+        size="sm"
+        className="mt-3 w-full"
+        disabled={!file || mutation.isPending}
+        onClick={() => mutation.mutate()}
+      >
+        {mutation.isPending ? t("importingLabel") : t("importButton")}
+      </Button>
+    </SettingCard>
   );
 }
 

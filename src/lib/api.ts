@@ -406,6 +406,35 @@ export function deleteAllTransactions() {
   });
 }
 
+export interface CsvImportResult {
+  added: number;
+  updated: number;
+  skipped: number;
+  format: string;
+  accountNumber: string;
+}
+
+export function importCsv(
+  file: File,
+  accountNumber?: string
+): Promise<CsvImportResult> {
+  const body = new FormData();
+  body.append("file", file);
+  if (accountNumber) body.append("accountNumber", accountNumber);
+  const wsId = getActiveWorkspaceIdSync();
+  const headers = new Headers();
+  if (wsId != null) headers.set("x-workspace-id", String(wsId));
+  return fetch("/api/import/csv", { method: "POST", headers, body }).then(
+    async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "Import failed");
+        throw new Error(text);
+      }
+      return res.json() as Promise<CsvImportResult>;
+    }
+  );
+}
+
 export function deleteIntegration(credentialId: number) {
   return fetchJSON<{ success: boolean }>(`/api/integrations/${credentialId}`, {
     method: "DELETE",
