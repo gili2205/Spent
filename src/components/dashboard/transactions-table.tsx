@@ -378,8 +378,19 @@ export function TransactionsTable({
             ) : null}
           </div>
         </div>
+        {hasActiveFilters || search.trim().length > 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("filterScopedToList")}
+          </p>
+        ) : null}
       </CardHeader>
-      <CardContent>
+      <CardContent
+        className={cn(
+          isFetching &&
+            !loading &&
+            "opacity-60 transition-opacity duration-200"
+        )}
+      >
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -451,11 +462,7 @@ export function TransactionsTable({
                   <TableHead className="w-[40px]" />
                 </TableRow>
               </TableHeader>
-              <TableBody
-                className={cn(
-                  isFetching && !loading && "opacity-60 transition-opacity duration-200"
-                )}
-              >
+              <TableBody>
                 {transactions.map((txn) => {
                   const isIncome = txn.chargedAmount > 0;
                   const directionColor = isIncome

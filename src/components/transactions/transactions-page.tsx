@@ -94,14 +94,8 @@ export function TransactionsPage() {
   });
 
   const summaryQuery = useQuery({
-    queryKey: ["transactions-summary", from, to, accountFilter],
-    queryFn: () =>
-      getTransactionsSummary({
-        from,
-        to,
-        credentialIds:
-          accountFilter.length > 0 ? accountFilter : undefined,
-      }),
+    queryKey: ["transactions-summary", from, to],
+    queryFn: () => getTransactionsSummary({ from, to }),
   });
 
   const categoriesQuery = useQuery({
@@ -111,6 +105,11 @@ export function TransactionsPage() {
   });
 
   const monthLabel = formatMonthLabel(selectedDate, locale);
+
+  const summaryInitialLoading =
+    summaryQuery.isPending && summaryQuery.data === undefined;
+  const tableInitialLoading =
+    transactionsQuery.isPending && transactionsQuery.data === undefined;
 
   return (
     <>
@@ -128,11 +127,11 @@ export function TransactionsPage() {
 
       <div className="space-y-6 p-4 md:p-6 lg:p-8">
         <AINotConnectedBanner />
-        <KpiCards summary={summaryQuery.data} loading={summaryQuery.isLoading} />
+        <KpiCards summary={summaryQuery.data} loading={summaryInitialLoading} />
 
         <WidgetsRow
           summary={summaryQuery.data}
-          loading={summaryQuery.isLoading}
+          loading={summaryInitialLoading}
         />
 
         <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-border bg-card p-1 w-fit">
@@ -164,7 +163,7 @@ export function TransactionsPage() {
           total={transactionsQuery.data?.total ?? 0}
           categories={categoriesQuery.data ?? []}
           integrations={integrationsQuery.data ?? []}
-          loading={transactionsQuery.isLoading}
+          loading={tableInitialLoading}
           isFetching={transactionsQuery.isFetching}
           sortField={sortField}
           sortOrder={sortOrder}

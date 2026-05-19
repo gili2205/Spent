@@ -160,6 +160,7 @@
     "filterCategory": "Category",
     "filterAny": "Any",
     "filterClear": "Clear filters",
+    "filterScopedToList": "Filters apply to the list below. Totals above are for all accounts.",
     "filterSelectedCount": "{count} selected",
     "filterSelectAll": "Select all",
     "filterClearSelection": "Clear",

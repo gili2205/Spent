@@ -160,6 +160,7 @@
     "filterCategory": "קטגוריה",
     "filterAny": "הכל",
     "filterClear": "נקה מסננים",
+    "filterScopedToList": "המסננים חלים על הרשימה למטה. הסיכומים למעלה לכל החשבונות.",
     "filterSelectedCount": "{count} נבחרו",
     "filterSelectAll": "בחר הכל",
     "filterClearSelection": "נקה",
